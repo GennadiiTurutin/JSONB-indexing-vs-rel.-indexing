@@ -1,0 +1,95 @@
+services:
+  db:
+    image: postgres:17
+    container_name: ddb_pg17
+    env_file: .env
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./db/initdb.d:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+
+    # Container resource caps
+    cpus: "8.0"
+    mem_limit: "32g"
+
+    # Exec-form command: each argument is its own list item
+    command:
+      - postgres
+      - -c
+      - shared_buffers=8GB                 # ~25% of container RAM
+      - -c
+      - effective_cache_size=24GB          # OS cache hint (mem - shared_buffers)
+      - -c
+      - work_mem=256MB                     # per sort/hash; careful with concurrency
+      - -c
+      - maintenance_work_mem=2GB           # faster index builds, VACUUM, etc.
+      - -c
+      - max_parallel_workers_per_gather=4
+      - -c
+      - max_parallel_workers=8
+      - -c
+      - max_worker_processes=8
+      - -c
+      - jit=off                            # less noise in microbenchmarks
+      - -c
+      - random_page_cost=1.1               # SSD/NVMe hint
+      - -c
+      - effective_io_concurrency=200       # SSD/NVMe hint
+      - -c
+      - checkpoint_timeout=30min           # fewer checkpoints
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_compression=on
+      - -c
+      - synchronous_commit=off             # helps inserts; no effect on SELECTs
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  seed:
+    image: postgres:17
+    container_name: ddb_seed
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./sql:/sql:ro
+    # Bigger per-connection knobs only during seeding:
+    environment:
+      PGOPTIONS: "-c work_mem=2GB -c maintenance_work_mem=4GB -c jit=off -c synchronous_commit=off"
+    command: >
+      bash -lc "
+      export PGPASSWORD=$${POSTGRES_PASSWORD};
+      psql -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -v rows=$${ROWS} -f /sql/10_seed.sql -v ON_ERROR_STOP=1 &&
+      psql -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -f /sql/20_indexes.sql -v ON_ERROR_STOP=1 &&
+      psql -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -f /sql/30_analyze.sql -v ON_ERROR_STOP=1
+      "
+
+  bench:
+    image: postgres:17
+    container_name: ddb_bench
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./sql:/sql:ro
+      - ./out:/out
+    # Mild per-connection tuning for consistent SELECT timings:
+    environment:
+      PGOPTIONS: "-c work_mem=512MB -c jit=off"
+    command: >
+      bash -lc "
+      export PGPASSWORD=$${POSTGRES_PASSWORD};
+      TS=$(date +%Y%m%d_%H%M%S);
+      psql -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -f /sql/40_bench.sql -v ON_ERROR_STOP=1 | tee /out/bench_$${TS}.txt
+      "
+
+volumes:
+  pgdata:

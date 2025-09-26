@@ -1,0 +1,11 @@
+variant,jsonb_indexed,jsonb_unindexed,rel_indexed,rel_unindexed,family
+S10_topn_order,0.05,53.287,0.059,26.103,S10
+S1_expr_eq_num,8.408,29.774,5.901,38.127,S1
+S2_like_prefix,0.081,43.753,0.049,17.51,S2
+S3_trgm_contains,48.352,119.27,33.206,67.816,S3
+S4_ts_range,6.872,36.822,5.14,21.497,S4
+S5_array_and,23.586,66.241,12.83,39.995,S5
+S6_array_or,88.394,83.565,23.472,42.19,S6
+S7_and2,8.085,8.462,4.853,27.477,S7
+S8_and3,1.532,1.559,0.01,28.453,S8
+S9_or_keys,65.116,68.901,16.496,33.334,S9

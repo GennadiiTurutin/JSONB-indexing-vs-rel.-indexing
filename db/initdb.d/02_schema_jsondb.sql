@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS inv_jsonb (
+  id       BIGSERIAL PRIMARY KEY,
+  payload  JSONB NOT NULL
+);

@@ -1,0 +1,11 @@
+variant,jsonb_indexed,jsonb_unindexed,rel_indexed,rel_unindexed,family
+S10_topn_order,0,0,0,0,S10
+S1_expr_eq_num,0,0,0,0,S1
+S2_like_prefix,0,0,0,0,S2
+S3_trgm_contains,0,0,0,0,S3
+S4_ts_range,0,0,0,0,S4
+S5_array_and,0,0,0,0,S5
+S6_array_or,0,0,0,0,S6
+S7_and2,0,0,0,0,S7
+S8_and3,0,0,0,0,S8
+S9_or_keys,0,0,0,0,S9
