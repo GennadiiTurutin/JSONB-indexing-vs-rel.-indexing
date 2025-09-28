@@ -1,4 +1,4 @@
-variant,jsonb_indexed,jsonb_unindexed,rel_indexed,rel_unindexed,family
+variant,N=1000000 jsonb_indexed,N=1000000 jsonb_unindexed,N=1000000 rel_indexed,N=1000000 rel_unindexed,family
 S10_topn_order,0,0,0,0,S10
 S1_expr_eq_num,0,0,0,0,S1
 S2_like_prefix,0,0,0,0,S2

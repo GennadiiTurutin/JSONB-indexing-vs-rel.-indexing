@@ -262,6 +262,13 @@ python viz_single_run.py \
   --outdir viz_single_100K_grouped \
   --title-template "N={N} {metric}"
 
+python viz_single_run.py \
+  --file exports/performance_run_1000000.xlsx \
+  --labels "N=1000000 jsonb_indexed" "N=1000000 jsonb_unindexed" \
+           "N=1000000 rel_indexed"   "N=1000000 rel_unindexed" \
+  --all \
+  --outdir viz_single_1mi_grouped \
+  --title-template "N={N} {metric}"
 
 # y-log scale, both indexed & unindexed, across all sizes in exports/
 python viz_scaling.py \

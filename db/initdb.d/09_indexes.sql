@@ -39,11 +39,11 @@ CREATE INDEX IF NOT EXISTS inv_rel_idx_text_arr_2 ON inv_rel USING GIN (indexed_
 CREATE INDEX IF NOT EXISTS inv_rel_idx_text_arr_3 ON inv_rel USING GIN (indexed_text_array_3);
 
 -- Composite examples
-CREATE INDEX IF NOT EXISTS inv_rel_idx_text1_ts1_num1_inc_id
-  ON inv_rel (indexed_text_1, indexed_timestamp_1, indexed_number_1) INCLUDE (id);
+CREATE INDEX IF NOT EXISTS inv_rel_idx_text1_ts1_num1
+  ON inv_rel (indexed_text_1, indexed_timestamp_1, indexed_number_1);
 
-CREATE INDEX IF NOT EXISTS inv_rel_idx_text1_ts1_desc_inc_id
-  ON inv_rel (indexed_text_1, indexed_timestamp_1 DESC) INCLUDE (id);
+CREATE INDEX IF NOT EXISTS inv_rel_idx_text1_ts1_desc
+  ON inv_rel (indexed_text_1, indexed_timestamp_1 DESC);
 
 -- --------------------- inv_jsonb (payload) ---------------------
 -- GIN containment
