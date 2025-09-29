@@ -286,3 +286,6 @@ python viz_scaling.py \
   --indexing indexed \
   --scale xylog \
   --outdir viz_scaling_avg_S1_S4
+
+
+ python3 make_relative_table.py --csv ./viz_single_1mi_grouped/p95_ms_wide.csv
