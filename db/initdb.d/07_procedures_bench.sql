@@ -1,7 +1,5 @@
 \set ON_ERROR_STOP on
 
-CREATE SCHEMA IF NOT EXISTS bench;
-
 -- =========================================================
 -- Seeds inv_rel + inv_jsonb with identical values
 -- Uses a per-batch TEMP TABLE so both inserts share the same rows

@@ -1,7 +1,3 @@
--- Ensure a superuser role `postgres` exists with the password `postgres`,
--- and make sure the `ledgerdb` database exists and is owned by that role.
--- Idempotent: safe to run multiple times.
-
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN

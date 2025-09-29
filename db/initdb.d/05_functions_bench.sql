@@ -1,7 +1,5 @@
 \set ON_ERROR_STOP on
 
-CREATE SCHEMA IF NOT EXISTS bench;
-
 -- ===========================================================
 -- bench.run(label, variant, sql, runs=7, warmup=2,
 --           seqscan=NULL, jit=NULL)  RETURNS void
