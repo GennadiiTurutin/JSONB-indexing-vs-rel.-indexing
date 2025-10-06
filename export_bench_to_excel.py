@@ -21,7 +21,7 @@ ENGINE = create_engine(
     pool_pre_ping=True,
 )
 
-def run_suite(n: int, runs: int = 7, warm: int = 2, clear: bool = True):
+def run_suite(n: int, runs: int = 30, warm: int = 2, clear: bool = True):
     print(f"\n▶ Running suite for N={n:,} ...")
     with ENGINE.begin() as conn:
         conn.execute(

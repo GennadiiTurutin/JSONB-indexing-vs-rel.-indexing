@@ -267,29 +267,25 @@ WHERE unindexed_text_1 = 'A' OR unindexed_boolean_1 = true;
 EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING off, FORMAT TEXT)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_1') = 'A'
-ORDER BY (payload->>'indexed_timestamp_1') DESC
-LIMIT 50;
+ORDER BY (payload->>'indexed_timestamp_1');
 
 \echo :sep
 \echo 'S10 — jsonb_unindexed'
 EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING off, FORMAT TEXT)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'unindexed_text_1') = 'A'
-ORDER BY (payload->>'unindexed_timestamp_1') DESC
-LIMIT 50;
+ORDER BY (payload->>'unindexed_timestamp_1');
 
 \echo :sep
 \echo 'S10 — rel_indexed'
 EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING off, FORMAT TEXT)
 SELECT id FROM inv_rel
 WHERE indexed_text_1 = 'A'
-ORDER BY indexed_timestamp_1 DESC
-LIMIT 50;
+ORDER BY indexed_timestamp_1;
 
 \echo :sep
 \echo 'S10 — rel_unindexed'
 EXPLAIN (ANALYZE, BUFFERS, WAL, SETTINGS, TIMING off, FORMAT TEXT)
 SELECT id FROM inv_rel
 WHERE unindexed_text_1 = 'A'
-ORDER BY unindexed_timestamp_1 DESC
-LIMIT 50;
+ORDER BY unindexed_timestamp_1;

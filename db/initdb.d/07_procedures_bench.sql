@@ -131,9 +131,12 @@ $proc$;
 -- =========================================================
 -- Driver: seed to N and run S1..S10 for all groups
 -- =========================================================
+-- =========================================================
+-- Driver: seed to N and run S1..S10 for all groups
+-- =========================================================
 CREATE OR REPLACE PROCEDURE bench.run_suite_for_size(
   p_rows   BIGINT,
-  p_runs   INT DEFAULT 10,
+  p_runs   INT DEFAULT 30,
   p_warmup INT DEFAULT 2,
   p_clear  BOOLEAN DEFAULT false   -- set true to wipe previous results for these labels
 )
@@ -157,193 +160,238 @@ BEGIN
 
   -- =============== S1) Equality text + numeric inequality ===============
   PERFORM bench.run(lbl_jsonb_idx,'S1_expr_eq_num',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'indexed_text_1') = 'A'
-         AND ((payload->>'indexed_number_1')::numeric) > 100$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'indexed_text_1') = 'A'
+        AND ((payload->>'indexed_number_1')::numeric) > 100$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S1_expr_eq_num',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'unindexed_text_1') = 'A'
-         AND ((payload->>'unindexed_number_1')::numeric) > 100$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'unindexed_text_1') = 'A'
+        AND ((payload->>'unindexed_number_1')::numeric) > 100$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S1_expr_eq_num',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_1 = 'A' AND indexed_number_1 > 100$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_1 = 'A' AND indexed_number_1 > 100$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S1_expr_eq_num',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_1 = 'A' AND unindexed_number_1 > 100$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_1 = 'A' AND unindexed_number_1 > 100$$,
+    p_runs, p_warmup);
 
   -- =============== S2) LIKE prefix (left-anchored) ===============
   PERFORM bench.run(lbl_jsonb_idx,'S2_like_prefix',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'indexed_text_2') LIKE 'INV00012%'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'indexed_text_2') LIKE 'INV00012%'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S2_like_prefix',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'unindexed_text_2') LIKE 'INV00012%'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'unindexed_text_2') LIKE 'INV00012%'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S2_like_prefix',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_2 LIKE 'INV00012%'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_2 LIKE 'INV00012%'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S2_like_prefix',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_2 LIKE 'INV00012%'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_2 LIKE 'INV00012%'$$,
+    p_runs, p_warmup);
 
   -- =============== S3) Substring contains (ILIKE '%…%') / trigram ===============
   PERFORM bench.run(lbl_jsonb_idx,'S3_trgm_contains',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'indexed_text_3') ILIKE '%priority%'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'indexed_text_3') ILIKE '%priority%'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S3_trgm_contains',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'unindexed_text_3') ILIKE '%priority%'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'unindexed_text_3') ILIKE '%priority%'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S3_trgm_contains',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_3 ILIKE '%priority%'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_3 ILIKE '%priority%'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S3_trgm_contains',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_3 ILIKE '%priority%'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_3 ILIKE '%priority%'$$,
+    p_runs, p_warmup);
 
   -- =============== S4) Timestamp range ===============
   PERFORM bench.run(lbl_jsonb_idx,'S4_ts_range',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'indexed_timestamp_1') >= '2025-01-01T00:00:00.000Z'
-         AND (payload->>'indexed_timestamp_1') <  '2025-02-01T00:00:00.000Z'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'indexed_timestamp_1') >= '2025-01-01T00:00:00.000Z'
+        AND (payload->>'indexed_timestamp_1') <  '2025-02-01T00:00:00.000Z'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S4_ts_range',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'unindexed_timestamp_1') >= '2025-01-01T00:00:00.000Z'
-         AND (payload->>'unindexed_timestamp_1') <  '2025-02-01T00:00:00.000Z'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'unindexed_timestamp_1') >= '2025-01-01T00:00:00.000Z'
+        AND (payload->>'unindexed_timestamp_1') <  '2025-02-01T00:00:00.000Z'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S4_ts_range',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_timestamp_1 >= '2025-01-01 00:00:00+00'
-         AND indexed_timestamp_1 <  '2025-02-01 00:00:00+00'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_timestamp_1 >= '2025-01-01 00:00:00+00'
+        AND indexed_timestamp_1 <  '2025-02-01 00:00:00+00'$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S4_ts_range',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_timestamp_1 >= '2025-01-01 00:00:00+00'
-         AND unindexed_timestamp_1 <  '2025-02-01 00:00:00+00'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_timestamp_1 >= '2025-01-01 00:00:00+00'
+        AND unindexed_timestamp_1 <  '2025-02-01 00:00:00+00'$$,
+    p_runs, p_warmup);
 
   -- =============== S5) Array AND (contain BOTH) ===============
   PERFORM bench.run(lbl_jsonb_idx,'S5_array_and',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->'indexed_text_array_1') @> '["aml","priority"]'::jsonb$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->'indexed_text_array_1') @> '["aml","priority"]'::jsonb$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S5_array_and',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->'unindexed_text_array_1') @> '["aml","priority"]'::jsonb$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->'unindexed_text_array_1') @> '["aml","priority"]'::jsonb$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S5_array_and',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_array_1 @> ARRAY['aml','priority']::text[]$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_array_1 @> ARRAY['aml','priority']::text[]$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S5_array_and',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_array_1 @> ARRAY['aml','priority']::text[]$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_array_1 @> ARRAY['aml','priority']::text[]$$,
+    p_runs, p_warmup);
 
   -- =============== S6) Array OR (any overlap) ===============
   PERFORM bench.run(lbl_jsonb_idx,'S6_array_or',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->'indexed_text_array_1') @> '["aml"]'::jsonb
-          OR (payload->'indexed_text_array_1') @> '["priority"]'::jsonb$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->'indexed_text_array_1') @> '["aml"]'::jsonb
+         OR (payload->'indexed_text_array_1') @> '["priority"]'::jsonb$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S6_array_or',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->'unindexed_text_array_1') @> '["aml"]'::jsonb
-          OR (payload->'unindexed_text_array_1') @> '["priority"]'::jsonb$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->'unindexed_text_array_1') @> '["aml"]'::jsonb
+         OR (payload->'unindexed_text_array_1') @> '["priority"]'::jsonb$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S6_array_or',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_array_1 && ARRAY['aml','priority']::text[]$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_array_1 && ARRAY['aml','priority']::text[]$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S6_array_or',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_array_1 && ARRAY['aml','priority']::text[]$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_array_1 && ARRAY['aml','priority']::text[]$$,
+    p_runs, p_warmup);
 
   -- =============== S7) Multi-key AND (2 keys) ===============
+  -- JSONB containment form commented out when GIN(jsonb_path_ops) isn’t available.
   PERFORM bench.run(lbl_jsonb_idx,'S7_and2',
-    $q$SELECT id FROM inv_jsonb
-       WHERE payload @> '{"indexed_text_1":"A","indexed_boolean_1":true}'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'indexed_text_1') = 'A'
+        AND ((payload->>'indexed_boolean_1')::boolean) IS TRUE$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S7_and2',
-    $q$SELECT id FROM inv_jsonb
-       WHERE payload @> '{"unindexed_text_1":"A","unindexed_boolean_1":true}'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'unindexed_text_1') = 'A'
+        AND ((payload->>'unindexed_boolean_1')::boolean) IS TRUE$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S7_and2',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S7_and2',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true$$,
+    p_runs, p_warmup);
 
   -- =============== S8) Multi-key AND (3 keys) ===============
   PERFORM bench.run(lbl_jsonb_idx,'S8_and3',
-    $q$SELECT id FROM inv_jsonb
-       WHERE payload @> '{"indexed_text_1":"A","indexed_boolean_1":true,"indexed_number_1":100}'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'indexed_text_1') = 'A'
+        AND ((payload->>'indexed_boolean_1')::boolean) IS TRUE
+        AND ((payload->>'indexed_number_1')::numeric) = 100::numeric$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S8_and3',
-    $q$SELECT id FROM inv_jsonb
-       WHERE payload @> '{"unindexed_text_1":"A","unindexed_boolean_1":true,"unindexed_number_1":100}'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'unindexed_text_1') = 'A'
+        AND ((payload->>'unindexed_boolean_1')::boolean) IS TRUE
+        AND ((payload->>'unindexed_number_1')::numeric) = 100::numeric$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S8_and3',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true AND indexed_number_1 = 100$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true AND indexed_number_1 = 100$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S8_and3',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true AND unindexed_number_1 = 100$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true AND unindexed_number_1 = 100$$,
+    p_runs, p_warmup);
 
   -- =============== S9) OR across keys ===============
   PERFORM bench.run(lbl_jsonb_idx,'S9_or_keys',
-    $q$SELECT id FROM inv_jsonb
-       WHERE payload @> '{"indexed_text_1":"A"}'
-          OR payload @> '{"indexed_boolean_1":true}'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'indexed_text_1') = 'A'
+         OR ((payload->>'indexed_boolean_1')::boolean) IS TRUE$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S9_or_keys',
-    $q$SELECT id FROM inv_jsonb
-       WHERE payload @> '{"unindexed_text_1":"A"}'
-          OR payload @> '{"unindexed_boolean_1":true}'$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'unindexed_text_1') = 'A'
+         OR ((payload->>'unindexed_boolean_1')::boolean) IS TRUE$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S9_or_keys',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_1 = 'A' OR indexed_boolean_1 = true$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_1 = 'A' OR indexed_boolean_1 = true$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S9_or_keys',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_1 = 'A' OR unindexed_boolean_1 = true$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_1 = 'A' OR unindexed_boolean_1 = true$$,
+    p_runs, p_warmup);
 
   -- =============== S10) Top-N ordering within a group ===============
   PERFORM bench.run(lbl_jsonb_idx,'S10_topn_order',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'indexed_text_1') = 'A'
-       ORDER BY (payload->>'indexed_timestamp_1') DESC
-       LIMIT 50$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'indexed_text_1') = 'A'
+      ORDER BY (payload->>'indexed_timestamp_1')$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S10_topn_order',
-    $q$SELECT id FROM inv_jsonb
-       WHERE (payload->>'unindexed_text_1') = 'A'
-       ORDER BY (payload->>'unindexed_timestamp_1') DESC
-       LIMIT 50$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_jsonb
+      WHERE (payload->>'unindexed_text_1') = 'A'
+      ORDER BY (payload->>'unindexed_timestamp_1')$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S10_topn_order',
-    $q$SELECT id FROM inv_rel
-       WHERE indexed_text_1 = 'A'
-       ORDER BY indexed_timestamp_1 DESC
-       LIMIT 50$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE indexed_text_1 = 'A'
+      ORDER BY indexed_timestamp_1$$,
+    p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S10_topn_order',
-    $q$SELECT id FROM inv_rel
-       WHERE unindexed_text_1 = 'A'
-       ORDER BY unindexed_timestamp_1 DESC
-       LIMIT 50$q$, p_runs, p_warmup);
+    $$SELECT id FROM inv_rel
+      WHERE unindexed_text_1 = 'A'
+      ORDER BY unindexed_timestamp_1$$,
+    p_runs, p_warmup);
+
 END;
 $proc$;
+
 
 
 DO $$ BEGIN RAISE NOTICE 'bench procedures created/updated: seed_both, run_suite_for_size'; END $$;

@@ -107,8 +107,8 @@ Notes:
 
 ## Scenario 10 (S10) Top-N ordering within a group
 
-- Goal: WHERE … ORDER BY … LIMIT pattern with index-friendly ordering.
-- Predicate shape: WHERE text = 'A' ORDER BY timestamp DESC LIMIT 50.
+- Goal: WHERE … ORDER BY … with index-friendly ordering.
+- Predicate shape: WHERE text = 'A' ORDER BY timestamp.
 - Indexes (indexed variants):
 * Rel: composite index (indexed_text_1, indexed_timestamp_1 DESC) INCLUDE (id).
 * JSONB: optional composite functional index on ((payload->>'indexed_text_1'), (payload->>'indexed_timestamp_1') DESC) (string ts).
@@ -253,39 +253,22 @@ python export_bench_to_excel.py
 
 The Excel file aggregates p50/p95/avg and buffer counters per (label, variant).
 
-Visualize a single run (S1–S10 small multiples)
-python viz_single_run.py \
-  --file exports/performance_run_100000.xlsx \
-  --labels "N=100000 jsonb_indexed" "N=100000 jsonb_unindexed" \
-           "N=100000 rel_indexed"   "N=100000 rel_unindexed" \
-  --all \
-  --outdir viz_single_100K_grouped \
-  --title-template "N={N} {metric}"
-
 python viz_single_run.py \
   --file exports/performance_run_1000000.xlsx \
-  --labels "N=1000000 jsonb_indexed" "N=1000000 jsonb_unindexed" \
-           "N=1000000 rel_indexed"   "N=1000000 rel_unindexed" \
-  --all \
-  --outdir viz_single_1mi_grouped \
-  --title-template "N={N} {metric}"
-
-# y-log scale, both indexed & unindexed, across all sizes in exports/
-python viz_scaling.py \
-  --glob "exports/performance_run_*.xlsx" \
+  --labels "jsonb_ind" "jsonb_unind" "rel_ind" "rel_unind" \
   --metric p95_ms \
-  --indexing both \
-  --scale ylog \
-  --outdir viz_scaling_p95
+  --ylabel none \
+  --ratio 0.655
 
-# Only indexed, xy-log, selected scenarios
-python viz_scaling.py \
-  --glob "exports/performance_run_*.xlsx" \
-  --metric avg_ms \
-  --variants S1_expr_eq_num S4_ts_range \
-  --indexing indexed \
-  --scale xylog \
-  --outdir viz_scaling_avg_S1_S4
+# Scaling graph
+ python viz_scaling.py \        
+  --glob "exports/performance_run_*.xlsx" \    
+  --outdir viz_scaling \                                              
+  --metric p95_ms \
+  --ylabel none \
+  --ratio 0.655
 
 
  python3 make_relative_table.py --csv ./viz_single_1mi_grouped/p95_ms_wide.csv
+
+

@@ -42,8 +42,8 @@ CREATE INDEX IF NOT EXISTS inv_rel_idx_text_arr_3 ON inv_rel USING GIN (indexed_
 CREATE INDEX IF NOT EXISTS inv_rel_idx_text1_bl1_num1
 ON inv_rel (indexed_text_1, indexed_boolean_1, indexed_number_1);
 
-CREATE INDEX IF NOT EXISTS inv_rel_idx_text1_ts1_desc
-ON inv_rel (indexed_text_1, indexed_timestamp_1 DESC);
+CREATE INDEX IF NOT EXISTS inv_rel_idx_text1_ts1
+ON inv_rel (indexed_text_1, indexed_timestamp_1);
 
 -- --------------------- inv_jsonb (payload) ---------------------
 -- Equality / IN / range
@@ -89,5 +89,5 @@ ON inv_jsonb USING GIN ((payload->'indexed_text_array_3') jsonb_path_ops);
 CREATE INDEX IF NOT EXISTS inv_jsonb_idx_text1_bl1_num1_str
 ON inv_jsonb ((payload->>'indexed_text_1'), ((payload->>'indexed_boolean_1')::boolean), ((payload->>'indexed_number_1')::numeric));
 
-CREATE INDEX IF NOT EXISTS inv_jsonb_idx_text1_ts1desc_str
-ON inv_jsonb ((payload->>'indexed_text_1'), (payload->>'indexed_timestamp_1') DESC);
+CREATE INDEX IF NOT EXISTS inv_jsonb_idx_text1_ts1_str
+ON inv_jsonb ((payload->>'indexed_text_1'), (payload->>'indexed_timestamp_1'));

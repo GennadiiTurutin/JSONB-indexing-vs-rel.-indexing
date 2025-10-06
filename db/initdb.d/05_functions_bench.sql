@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 
 -- ===========================================================
--- bench.run(label, variant, sql, runs=7, warmup=2,
+-- bench.run(label, variant, sql, runs=30, warmup=2,
 --           seqscan=NULL, jit=NULL)  RETURNS void
 --
 -- Executes the given SQL with:
@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION bench.run(
   p_label   TEXT,
   p_variant TEXT,
   p_sql     TEXT,
-  p_runs    INT DEFAULT 7,
+  p_runs    INT DEFAULT 30,
   p_warmup  INT DEFAULT 2,
   p_seqscan BOOLEAN DEFAULT NULL,
   p_jit     BOOLEAN DEFAULT NULL

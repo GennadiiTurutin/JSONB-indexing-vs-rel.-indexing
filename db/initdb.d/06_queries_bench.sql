@@ -361,38 +361,32 @@ WHERE unindexed_text_1 = 'A' OR unindexed_boolean_1 = true$$);
      -- JSONB:
      SELECT id FROM inv_jsonb
      WHERE (payload->>'indexed_text_1') = 'A'
-     ORDER BY (payload->>'indexed_timestamp_1') DESC
-     LIMIT 50;
+     ORDER BY (payload->>'indexed_timestamp_1');
 
      -- Relational:
      SELECT id FROM inv_rel
      WHERE indexed_text_1 = 'A'
-     ORDER BY indexed_timestamp_1 DESC
-     LIMIT 50;
+     ORDER BY indexed_timestamp_1;
    ========================================================================== */
 SELECT bench.run('jsonb_indexed','S10_topn_order',
 $$SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_1') = 'A'
-ORDER BY (payload->>'indexed_timestamp_1') DESC
-LIMIT 50$$);
+ORDER BY (payload->>'indexed_timestamp_1')$$);
 
 SELECT bench.run('jsonb_unindexed','S10_topn_order',
 $$SELECT id FROM inv_jsonb
 WHERE (payload->>'unindexed_text_1') = 'A'
-ORDER BY (payload->>'unindexed_timestamp_1') DESC
-LIMIT 50$$);
+ORDER BY (payload->>'unindexed_timestamp_1')$$);
 
 SELECT bench.run('rel_indexed','S10_topn_order',
 $$SELECT id FROM inv_rel
 WHERE indexed_text_1 = 'A'
-ORDER BY indexed_timestamp_1 DESC
-LIMIT 50$$);
+ORDER BY indexed_timestamp_1$$);
 
 SELECT bench.run('rel_unindexed','S10_topn_order',
 $$SELECT id FROM inv_rel
 WHERE unindexed_text_1 = 'A'
-ORDER BY unindexed_timestamp_1 DESC
-LIMIT 50$$);
+ORDER BY unindexed_timestamp_1$$);
 
 
 /* =============================================================================
