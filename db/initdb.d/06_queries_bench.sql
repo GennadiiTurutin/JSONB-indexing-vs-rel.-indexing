@@ -281,7 +281,7 @@ $$SELECT id FROM inv_rel WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = 
 
 SELECT bench.run('jsonb_indexed','S8_and3',
 $$SELECT id
-FROM inv_jsonb WHERE (payload->>'indexed_text_1') = 'A' AND ((payload->>'indexed_boolean_1')::boolean) IS TRUE AND ((payload->>'indexed_number_1')::numeric) = 100::numeric;
+FROM inv_jsonb WHERE (payload->>'indexed_text_1') = 'A' AND ((payload->>'indexed_boolean_1')::boolean) IS TRUE AND ((payload->>'indexed_number_1')::numeric) > 100::numeric;
 $$); 
 
 -- cannot be used without indexes, as it cannot use GIN(jsonb_path_ops)
@@ -292,17 +292,17 @@ $$);
 SELECT bench.run('jsonb_unindexed','S8_and3',
 $$SELECT id
 FROM inv_jsonb
-WHERE (payload->>'unindexed_text_1') = 'A' AND ((payload->>'unindexed_boolean_1')::boolean) IS TRUE AND ((payload->>'unindexed_number_1')::numeric) = 100::numeric;
+WHERE (payload->>'unindexed_text_1') = 'A' AND ((payload->>'unindexed_boolean_1')::boolean) IS TRUE AND ((payload->>'unindexed_number_1')::numeric) > 100::numeric;
 $$);
 
 
 SELECT bench.run('rel_indexed','S8_and3',
 $$SELECT id FROM inv_rel
-WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true AND indexed_number_1 = 100$$);
+WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true AND indexed_number_1 > 100$$);
 
 SELECT bench.run('rel_unindexed','S8_and3',
 $$SELECT id FROM inv_rel
-WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true AND unindexed_number_1 = 100$$);
+WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true AND unindexed_number_1 > 10$$);
 
 
 /* ============================================================================

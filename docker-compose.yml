@@ -53,45 +53,5 @@ services:
       timeout: 5s
       retries: 30
 
-  seed:
-    image: postgres:17
-    container_name: ddb_seed
-    env_file: .env
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - ./sql:/sql:ro
-    # Bigger per-connection knobs only during seeding:
-    environment:
-      PGOPTIONS: "-c work_mem=2GB -c maintenance_work_mem=4GB -c jit=off -c synchronous_commit=off"
-    command: >
-      bash -lc "
-      export PGPASSWORD=$${POSTGRES_PASSWORD};
-      psql -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -v rows=$${ROWS} -f /sql/10_seed.sql -v ON_ERROR_STOP=1 &&
-      psql -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -f /sql/20_indexes.sql -v ON_ERROR_STOP=1 &&
-      psql -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -f /sql/30_analyze.sql -v ON_ERROR_STOP=1
-      "
-
-  bench:
-    image: postgres:17
-    container_name: ddb_bench
-    env_file: .env
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - ./sql:/sql:ro
-      - ./out:/out
-    # Mild per-connection tuning for consistent SELECT timings:
-    environment:
-      PGOPTIONS: "-c work_mem=512MB -c jit=off"
-    command: >
-      bash -lc "
-      export PGPASSWORD=$${POSTGRES_PASSWORD};
-      TS=$(date +%Y%m%d_%H%M%S);
-      psql -h db -U $${POSTGRES_USER} -d $${POSTGRES_DB} -f /sql/40_bench.sql -v ON_ERROR_STOP=1 | tee /out/bench_$${TS}.txt
-      "
-
 volumes:
   pgdata:

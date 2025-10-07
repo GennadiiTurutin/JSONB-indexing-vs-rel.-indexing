@@ -321,24 +321,24 @@ BEGIN
     $$SELECT id FROM inv_jsonb
       WHERE (payload->>'indexed_text_1') = 'A'
         AND ((payload->>'indexed_boolean_1')::boolean) IS TRUE
-        AND ((payload->>'indexed_number_1')::numeric) = 100::numeric$$,
+        AND ((payload->>'indexed_number_1')::numeric) > 100::numeric$$,
     p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S8_and3',
     $$SELECT id FROM inv_jsonb
       WHERE (payload->>'unindexed_text_1') = 'A'
         AND ((payload->>'unindexed_boolean_1')::boolean) IS TRUE
-        AND ((payload->>'unindexed_number_1')::numeric) = 100::numeric$$,
+        AND ((payload->>'unindexed_number_1')::numeric) > 100::numeric$$,
     p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S8_and3',
     $$SELECT id FROM inv_rel
-      WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true AND indexed_number_1 = 100$$,
+      WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true AND indexed_number_1 > 100$$,
     p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S8_and3',
     $$SELECT id FROM inv_rel
-      WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true AND unindexed_number_1 = 100$$,
+      WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true AND unindexed_number_1 > 100$$,
     p_runs, p_warmup);
 
   -- =============== S9) OR across keys ===============

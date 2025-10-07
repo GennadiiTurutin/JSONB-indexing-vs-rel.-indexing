@@ -110,8 +110,8 @@ Notes:
 - Goal: WHERE … ORDER BY … with index-friendly ordering.
 - Predicate shape: WHERE text = 'A' ORDER BY timestamp.
 - Indexes (indexed variants):
-* Rel: composite index (indexed_text_1, indexed_timestamp_1 DESC) INCLUDE (id).
-* JSONB: optional composite functional index on ((payload->>'indexed_text_1'), (payload->>'indexed_timestamp_1') DESC) (string ts).
+* Rel: composite index (indexed_text_1, indexed_timestamp_1).
+* JSONB: optional composite functional index on ((payload->>'indexed_text_1'), (payload->>'indexed_timestamp_1')) (string ts).
 
 
 
@@ -230,12 +230,9 @@ Removing with docker compose down -v deletes all DB data.
 1) Start Postgres
 docker compose up -d db
 
-2) Seed and create indexes (override ROWS as needed)
-docker compose run --rm -e ROWS=300000 seed
 # e.g. docker compose run --rm -e ROWS=1000000 seed
 
-3) Run the benchmark suite (outputs to ./out)
-docker compose run --rm bench
+3) Run the benchmark suite: python export_bench_to_excel.py 
 
 4) Shut down
 docker compose down -v
@@ -245,9 +242,6 @@ What gets benchmarked
 Scenarios (S1–S10): equality + inequality, LIKE prefix, substring (trigram), timestamp range, array AND / OR, multi-key AND, OR across keys, top-N within a group.
 
 Warmups: each scenario warms up (p_warmup) before timing (p_runs) to stabilize caches and JIT noise.
-
-Export metrics to Excel
-python export_bench_to_excel.py
 
 # → exports/performance_run_<N>.xlsx (sheet: "summary")
 
@@ -261,9 +255,9 @@ python viz_single_run.py \
   --ratio 0.655
 
 # Scaling graph
- python viz_scaling.py \        
-  --glob "exports/performance_run_*.xlsx" \    
-  --outdir viz_scaling \                                              
+python viz_scaling.py \                     
+  --glob "exports/performance_run_*.xlsx" \
+  --outdir viz_scaling \
   --metric p95_ms \
   --ylabel none \
   --ratio 0.655
