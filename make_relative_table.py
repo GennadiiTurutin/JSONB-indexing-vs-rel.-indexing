@@ -2,10 +2,10 @@
 # make_relative_table_image.py
 # Create a table image summarizing REL vs JSONB:
 #   - "REL faster by X%" or "JSONB faster by Y%" for indexed/unindexed
-#   - Also shows raw REL as % of JSONB (rounded)
+#   - (Removes the two rightmost REL% columns from the image/output)
 #
-# Input CSV must have columns:
-#   variant,jsonb_indexed,jsonb_unindexed,rel_indexed,rel_unindexed[,family]
+# Input CSV must have columns (lower/upper case allowed):
+#   variant, jsonb_ind, jsonb_unind, rel_ind, rel_unind [,family]
 #
 # Example:
 #   python make_relative_table_image.py \
@@ -15,14 +15,13 @@
 #       --dpi 180
 
 import argparse
-import math
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 
-REQUIRED = {"variant","jsonb_indexed","jsonb_unindexed","rel_indexed","rel_unindexed"}
+REQUIRED = {"variant","jsonb_ind","jsonb_unind","rel_ind","rel_unind"}
 
 def pct_or_nan(num, den):
     if den is None or not np.isfinite(den) or den <= 0:
@@ -46,49 +45,40 @@ def speed_note(rel_pct: float, round_to: int = 0) -> str:
         return "Parity"
 
 def numeric_variant_key(v: str):
-    # Sort S1..S10 naturally; fallback = string
-    import re
     m = re.match(r"^S(\d+)", str(v))
     return (0, int(m.group(1))) if m else (1, str(v))
 
 def build_table(df: pd.DataFrame, round_to: int = 0) -> pd.DataFrame:
     df = df.copy()
+    # normalize headers to lowercase for lookups
     df.columns = [c.lower() for c in df.columns]
 
-    # Compute REL% of JSONB
-    df["rel_indexed_pct"]   = df.apply(lambda r: pct_or_nan(r["rel_indexed"], r["jsonb_indexed"]), axis=1)
-    df["rel_unindexed_pct"] = df.apply(lambda r: pct_or_nan(r["rel_unindexed"], r["jsonb_unindexed"]), axis=1)
+    missing = sorted(REQUIRED - set(df.columns))
+    if missing:
+        raise ValueError(f"CSV missing required columns: {missing}\nFound: {list(df.columns)}")
 
-    # Notes
-    df["indexed_note"]   = df["rel_indexed_pct"].apply(lambda p: speed_note(p, round_to))
-    df["unindexed_note"] = df["rel_unindexed_pct"].apply(lambda p: speed_note(p, round_to))
+    # Compute REL% of JSONB (internal only; not displayed)
+    rel_idx_pct   = df.apply(lambda r: pct_or_nan(r["rel_ind"],   r["jsonb_ind"]),   axis=1)
+    rel_unidx_pct = df.apply(lambda r: pct_or_nan(r["rel_unind"], r["jsonb_unind"]), axis=1)
 
-    # Pretty percentages for display (whole % by default)
-    df["rel_indexed_pct_disp"]   = df["rel_indexed_pct"].map(lambda x: f"{x:.0f}%" if np.isfinite(x) else "—")
-    df["rel_unindexed_pct_disp"] = df["rel_unindexed_pct"].map(lambda x: f"{x:.0f}%" if np.isfinite(x) else "—")
+    # Notes (displayed)
+    df["indexed_note"]   = rel_idx_pct.apply(lambda p: speed_note(p, round_to))
+    df["unindexed_note"] = rel_unidx_pct.apply(lambda p: speed_note(p, round_to))
 
     # Sort naturally by variant if present
     if "variant" in df.columns:
         df = df.sort_values("variant", key=lambda s: s.map(numeric_variant_key))
 
-    # Final visible columns
-    out = df[[
-        "variant",
-        "indexed_note",
-        "unindexed_note",
-        "rel_indexed_pct_disp",
-        "rel_unindexed_pct_disp",
-    ]].rename(columns={
+    # Final visible columns ONLY (drop REL% columns)
+    out = df[["variant", "indexed_note", "unindexed_note"]].rename(columns={
         "variant": "Variant",
         "indexed_note": "Indexed",
         "unindexed_note": "Unindexed",
-        "rel_indexed_pct_disp": "REL% of JSONB (idx)",
-        "rel_unindexed_pct_disp": "REL% of JSONB (no-idx)",
     })
     return out
 
 def render_table_image(table_df: pd.DataFrame, out_path: str, title: str = "",
-                       dpi: int = 180, base_width: float = 12.0,
+                       dpi: int = 180, base_width: float = 9.0,
                        row_height_in: float = 0.85,
                        header_fontsize: int = 12, body_fontsize: int = 10,
                        title_fontsize: int = 16):
@@ -101,11 +91,11 @@ def render_table_image(table_df: pd.DataFrame, out_path: str, title: str = "",
     ax.axis("off")
 
     # Column labels / cell text
-    col_labels = list(table_df.columns)
+    col_labels = list(table_df.columns)  # ["Variant","Indexed","Unindexed"]
     cell_text = table_df.values.tolist()
 
-    # Reasonable column widths
-    col_widths = [0.18, 0.24, 0.24, 0.17, 0.17]
+    # Column widths for 3 columns
+    col_widths = [0.30, 0.35, 0.35]
 
     tbl = ax.table(
         cellText=cell_text,
@@ -119,7 +109,7 @@ def render_table_image(table_df: pd.DataFrame, out_path: str, title: str = "",
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(body_fontsize)
 
-    # Header styling (simple monochrome)
+    # Header styling
     for j in range(len(col_labels)):
         cell = tbl[0, j]
         cell.set_facecolor("white")
@@ -138,11 +128,9 @@ def render_table_image(table_df: pd.DataFrame, out_path: str, title: str = "",
             cell.set_linewidth(0.8)
             cell.PAD = 0.10
             cell.set_height(0.085)
-            # left-align variant; right-align percentages; center notes
+            # left-align variant; center notes
             if j == 0:
                 cell._loc = "w"
-            elif j in (3, 4):
-                cell._loc = "e"
             else:
                 cell._loc = "c"
 
@@ -151,15 +139,15 @@ def render_table_image(table_df: pd.DataFrame, out_path: str, title: str = "",
         ax.text(0.5, 1.03, title, ha="center", va="bottom",
                 fontsize=title_fontsize, fontweight="bold", transform=ax.transAxes, color="black")
 
-    plt.subplots_adjust(top=0.88, bottom=0.06, left=0.04, right=0.98)
+    plt.subplots_adjust(top=0.88, bottom=0.06, left=0.06, right=0.98)
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=dpi, bbox_inches="tight", pad_inches=0.6)
     plt.close(fig)
 
 def main():
-    ap = argparse.ArgumentParser(description="Generate a PNG table image of REL vs JSONB speed notes.")
+    ap = argparse.ArgumentParser(description="Generate a PNG table image of REL vs JSONB speed notes (3 columns).")
     ap.add_argument("--csv", required=True,
-                    help="Input CSV (variant,jsonb_indexed,jsonb_unindexed,rel_indexed,rel_unindexed[,family])")
+                    help="Input CSV (variant,jsonb_ind,jsonb_unind,rel_ind,rel_unind[,family])")
     ap.add_argument("--out", default="relative_table.png", help="Output PNG path")
     ap.add_argument("--title", default="", help="Optional image title (e.g., 'Relative p95 latency — N=1,000,000')")
     ap.add_argument("--dpi", type=int, default=180, help="Image DPI (default 180)")

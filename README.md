@@ -188,7 +188,7 @@ python test_superiority.py \
   --label-rel   "N=1000000 rel_indexed" \
   --label-jsonb "N=1000000 jsonb_indexed" \
   --delta 0.20 \
-  --alpha 0.05
+  --alpha 0.05 --image
 
 Typical output (per scenario + overall):
 
@@ -262,7 +262,8 @@ python viz_scaling.py \
   --ylabel none \
   --ratio 0.655
 
-
- python3 make_relative_table.py --csv ./viz_single_1mi_grouped/p95_ms_wide.csv
-
-
+# Relative performance graph
+python3 make_relative_table.py \
+  --csv ./viz_single_grouped/p95_ms_wide.csv \
+  --title "Relative Performance (p95)" \
+  --out ./relative_table.png
