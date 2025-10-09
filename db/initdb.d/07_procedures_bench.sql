@@ -282,14 +282,16 @@ BEGIN
          OR (payload->'unindexed_text_array_1') @> '["priority"]'::jsonb$$,
     p_runs, p_warmup);
 
-  PERFORM bench.run(lbl_rel_idx,'S6_array_or',
-    $$SELECT id FROM inv_rel
-      WHERE indexed_text_array_1 && ARRAY['aml','priority']::text[]$$,
-    p_runs, p_warmup);
+  PERFORM bench.run(lbl_rel_idx, 'S6_array_or',
+  $$SELECT id FROM inv_rel
+    WHERE 'aml' = ANY(indexed_text_array_1)
+       OR 'priority' = ANY(indexed_text_array_1)$$,
+  p_runs, p_warmup);
 
-  PERFORM bench.run(lbl_rel_unidx,'S6_array_or',
+  PERFORM bench.run(lbl_rel_unidx, 'S6_array_or',
     $$SELECT id FROM inv_rel
-      WHERE unindexed_text_array_1 && ARRAY['aml','priority']::text[]$$,
+      WHERE 'aml' = ANY(unindexed_text_array_1)
+        OR 'priority' = ANY(unindexed_text_array_1)$$,
     p_runs, p_warmup);
 
   -- =============== S7) Multi-key AND (2 keys) ===============

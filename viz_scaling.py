@@ -322,7 +322,7 @@ def main():
                          "Overrides --column. Example: --ratio 2 makes width = 2 × height.")
 
     # Proper on/off flags for styling (default ON)
-    group = ap.add_mutually_exclusive_group()
+    # group = ap.add_mutually_exclusive_group()
     args = ap.parse_args()
 
     apply_style(dpi=args.dpi, base_font=9)

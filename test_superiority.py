@@ -365,7 +365,7 @@ def main():
     print(out_df.to_string(index=False, float_format=lambda x: f"{x:.4g}"))
 
     # Save CSV
-    out_df.to_csv("./results/superiority_results.csv", index=False)
+    out_df.to_csv("./superiority_results.csv", index=False)
     print("\nSaved: superiority_results.csv")
 
     # Optional image

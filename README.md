@@ -255,12 +255,12 @@ python viz_single_run.py \
   --ratio 0.655
 
 # Scaling graph
-python viz_scaling.py \                     
-  --glob "exports/performance_run_*.xlsx" \
+python viz_scaling.py --glob "exports/performance_run_*.xlsx" \
   --outdir viz_scaling \
   --metric p95_ms \
   --ylabel none \
   --ratio 0.655
+
 
 # Relative performance graph
 python3 make_relative_table.py \
