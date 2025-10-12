@@ -1,5 +1,7 @@
 \set ON_ERROR_STOP on
 
+SELECT setseed(0.42);   -- makes random() reproducible across runs
+
 -- =========================================================
 -- Seeds inv_rel + inv_jsonb with identical values
 -- Uses a per-batch TEMP TABLE so both inserts share the same rows
@@ -10,6 +12,9 @@ LANGUAGE plpgsql AS $proc$
 DECLARE
   batch_start BIGINT := 1;
   batch_end   BIGINT;
+  v_year_start  timestamptz := timestamptz '2025-01-01 00:00:00+00';
+  v_year_end    timestamptz := timestamptz '2026-01-01 00:00:00+00';
+  v_year_secs   double precision := EXTRACT(EPOCH FROM (v_year_end - v_year_start));
 BEGIN
   PERFORM set_config('synchronous_commit','off', true);
   PERFORM set_config('jit','off', true);
@@ -29,9 +34,12 @@ BEGIN
              [ ((g % 6)::int) + 1 ]                                AS t3,
 
            -- FIXED timestamp generation (no text->interval cast)
-           (now() - (interval '1 day' * (random()*365))) AS ts1,
-           (now() - (interval '1 day' * (random()*365))) AS ts2,
-           (now() - (interval '1 day' * (random()*365))) AS ts3,
+          --  (now() - (interval '1 day' * (random()*365))) AS ts1,
+          --  (now() - (interval '1 day' * (random()*365))) AS ts2,
+          --  (now() - (interval '1 day' * (random()*365))) AS ts3,
+           (v_year_start + (random() * v_year_secs) * interval '1 second') AS ts1,
+           (v_year_start + (random() * v_year_secs) * interval '1 second') AS ts2,
+           (v_year_start + (random() * v_year_secs) * interval '1 second') AS ts3,
 
            round((random()*1000000)::numeric, 2)          AS num1,
            round((random()*1000000)::numeric, 2)          AS num2,
@@ -131,9 +139,6 @@ $proc$;
 -- =========================================================
 -- Driver: seed to N and run S1..S10 for all groups
 -- =========================================================
--- =========================================================
--- Driver: seed to N and run S1..S10 for all groups
--- =========================================================
 CREATE OR REPLACE PROCEDURE bench.run_suite_for_size(
   p_rows   BIGINT,
   p_runs   INT DEFAULT 30,
@@ -225,28 +230,31 @@ BEGIN
 
   -- =============== S4) Timestamp range ===============
   PERFORM bench.run(lbl_jsonb_idx,'S4_ts_range',
-    $$SELECT id FROM inv_jsonb
-      WHERE (payload->>'indexed_timestamp_1') >= '2025-01-01T00:00:00.000Z'
-        AND (payload->>'indexed_timestamp_1') <  '2025-02-01T00:00:00.000Z'$$,
-    p_runs, p_warmup);
+  $$SELECT id FROM inv_jsonb
+  WHERE (payload->>'indexed_timestamp_1') COLLATE "C" >= '2025-01-01T00:00:00.000Z'
+    AND (payload->>'indexed_timestamp_1') COLLATE "C" < '2025-02-01T00:00:00.000Z'$$,
+  p_runs, p_warmup);
 
+  -- JSONB (unindexed)
   PERFORM bench.run(lbl_jsonb_unidx,'S4_ts_range',
-    $$SELECT id FROM inv_jsonb
-      WHERE (payload->>'unindexed_timestamp_1') >= '2025-01-01T00:00:00.000Z'
-        AND (payload->>'unindexed_timestamp_1') <  '2025-02-01T00:00:00.000Z'$$,
-    p_runs, p_warmup);
+  $$SELECT id FROM inv_jsonb
+  WHERE (payload->>'unindexed_timestamp_1') COLLATE "C" >= '2025-01-01T00:00:00.000Z'
+    AND (payload->>'unindexed_timestamp_1') COLLATE "C" < '2025-02-01T00:00:00.000Z'$$,
+  p_runs, p_warmup);
 
+  -- REL (indexed)
   PERFORM bench.run(lbl_rel_idx,'S4_ts_range',
-    $$SELECT id FROM inv_rel
-      WHERE indexed_timestamp_1 >= '2025-01-01 00:00:00+00'
-        AND indexed_timestamp_1 <  '2025-02-01 00:00:00+00'$$,
-    p_runs, p_warmup);
+  $$SELECT id FROM inv_rel
+  WHERE indexed_timestamp_1 >= timestamptz '2025-01-01 00:00:00+00'
+    AND indexed_timestamp_1 < timestamptz '2025-02-01 00:00:00+00'$$,
+  p_runs, p_warmup);
 
+  -- REL (unindexed)
   PERFORM bench.run(lbl_rel_unidx,'S4_ts_range',
-    $$SELECT id FROM inv_rel
-      WHERE unindexed_timestamp_1 >= '2025-01-01 00:00:00+00'
-        AND unindexed_timestamp_1 <  '2025-02-01 00:00:00+00'$$,
-    p_runs, p_warmup);
+  $$SELECT id FROM inv_rel
+  WHERE unindexed_timestamp_1 >= timestamptz '2025-01-01 00:00:00+00'
+    AND unindexed_timestamp_1 < timestamptz '2025-02-01 00:00:00+00'$$,
+  p_runs, p_warmup);
 
   -- =============== S5) Array AND (contain BOTH) ===============
   PERFORM bench.run(lbl_jsonb_idx,'S5_array_and',
@@ -273,25 +281,25 @@ BEGIN
   PERFORM bench.run(lbl_jsonb_idx,'S6_array_or',
     $$SELECT id FROM inv_jsonb
       WHERE (payload->'indexed_text_array_1') @> '["aml"]'::jsonb
-         OR (payload->'indexed_text_array_1') @> '["priority"]'::jsonb$$,
+         OR (payload->'indexed_text_array_2') @> '["grpA"]'::jsonb$$,
     p_runs, p_warmup);
 
   PERFORM bench.run(lbl_jsonb_unidx,'S6_array_or',
     $$SELECT id FROM inv_jsonb
       WHERE (payload->'unindexed_text_array_1') @> '["aml"]'::jsonb
-         OR (payload->'unindexed_text_array_1') @> '["priority"]'::jsonb$$,
+         OR (payload->'unindexed_text_array_2') @> '["grpA"]'::jsonb$$,
     p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx, 'S6_array_or',
   $$SELECT id FROM inv_rel
-    WHERE 'aml' = ANY(indexed_text_array_1)
-       OR 'priority' = ANY(indexed_text_array_1)$$,
+    WHERE indexed_text_array_1 @> ARRAY['aml']::text[]
+    OR indexed_text_array_2 @> ARRAY['grpA']::text[]$$,
   p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx, 'S6_array_or',
     $$SELECT id FROM inv_rel
-      WHERE 'aml' = ANY(unindexed_text_array_1)
-        OR 'priority' = ANY(unindexed_text_array_1)$$,
+      WHERE unindexed_text_array_1 @> ARRAY['aml']::text[]
+      OR unindexed_text_array_2 @> ARRAY['grpA']::text[]$$,
     p_runs, p_warmup);
 
   -- =============== S7) Multi-key AND (2 keys) ===============
@@ -310,12 +318,12 @@ BEGIN
 
   PERFORM bench.run(lbl_rel_idx,'S7_and2',
     $$SELECT id FROM inv_rel
-      WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true$$,
+      WHERE indexed_text_1 = 'A' AND indexed_boolean_1 IS TRUE$$,
     p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S7_and2',
     $$SELECT id FROM inv_rel
-      WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true$$,
+      WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 IS TRUE$$,
     p_runs, p_warmup);
 
   -- =============== S8) Multi-key AND (3 keys) ===============
@@ -335,12 +343,12 @@ BEGIN
 
   PERFORM bench.run(lbl_rel_idx,'S8_and3',
     $$SELECT id FROM inv_rel
-      WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = true AND indexed_number_1 > 100$$,
+      WHERE indexed_text_1 = 'A' AND indexed_boolean_1 IS TRUE AND indexed_number_1 > 100$$,
     p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S8_and3',
     $$SELECT id FROM inv_rel
-      WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 = true AND unindexed_number_1 > 100$$,
+      WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 IS TRUE AND unindexed_number_1 > 100$$,
     p_runs, p_warmup);
 
   -- =============== S9) OR across keys ===============
@@ -358,26 +366,27 @@ BEGIN
 
   PERFORM bench.run(lbl_rel_idx,'S9_or_keys',
     $$SELECT id FROM inv_rel
-      WHERE indexed_text_1 = 'A' OR indexed_boolean_1 = true$$,
+      WHERE indexed_text_1 = 'A' OR indexed_boolean_1 IS TRUE$$,
     p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_unidx,'S9_or_keys',
     $$SELECT id FROM inv_rel
-      WHERE unindexed_text_1 = 'A' OR unindexed_boolean_1 = true$$,
+      WHERE unindexed_text_1 = 'A' OR unindexed_boolean_1 IS TRUE$$,
     p_runs, p_warmup);
 
   -- =============== S10) Top-N ordering within a group ===============
   PERFORM bench.run(lbl_jsonb_idx,'S10_topn_order',
-    $$SELECT id FROM inv_jsonb
-      WHERE (payload->>'indexed_text_1') = 'A'
-      ORDER BY (payload->>'indexed_timestamp_1')$$,
-    p_runs, p_warmup);
+  $$SELECT id FROM inv_jsonb
+    WHERE (payload->>'indexed_text_1') = 'A'
+    ORDER BY (payload->>'indexed_timestamp_1') COLLATE "C"$$,
+  p_runs, p_warmup);
 
+  -- JSONB (unindexed)
   PERFORM bench.run(lbl_jsonb_unidx,'S10_topn_order',
-    $$SELECT id FROM inv_jsonb
-      WHERE (payload->>'unindexed_text_1') = 'A'
-      ORDER BY (payload->>'unindexed_timestamp_1')$$,
-    p_runs, p_warmup);
+  $$SELECT id FROM inv_jsonb
+    WHERE (payload->>'unindexed_text_1') = 'A'
+    ORDER BY (payload->>'unindexed_timestamp_1') COLLATE "C"$$,
+  p_runs, p_warmup);
 
   PERFORM bench.run(lbl_rel_idx,'S10_topn_order',
     $$SELECT id FROM inv_rel

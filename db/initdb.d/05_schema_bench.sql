@@ -19,3 +19,6 @@ CREATE TABLE IF NOT EXISTS bench.results (
   temp_writes     BIGINT,
   notes           TEXT
 );
+
+CREATE INDEX IF NOT EXISTS bench_results_label_variant_idx
+ON bench.results(label, variant, ts);

@@ -69,8 +69,8 @@ def write_excels(n: int, df_summary: pd.DataFrame, df_results: pd.DataFrame):
         df_results[["label","variant","run_no","plan_text"]] \
             .to_excel(xw, index=False, sheet_name="plans")
 
-    print(f"   ✔ Wrote {perf_path}")
-    print(f"   ✔ Wrote {plan_path}")
+    print(f"Wrote {perf_path}")
+    print(f"Wrote {plan_path}")
 
 def main():
     try:

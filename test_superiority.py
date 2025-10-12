@@ -1,314 +1,197 @@
 #!/usr/bin/env python3
 """
-test_superiority.py
+test_superiority_csv.py — Superiority test from per-run CSV (bench_results.csv), filtered to a single N.
 
-Hypothesis: relational (rel_indexed) is at least Δ faster than jsonb (jsonb_indexed)
-for each scenario (variant) at large N by comparing execution_ms.
+Data expected (columns subset):
+  id, ts, label, variant, run_no, execution_ms, ...
 
-We compare paired runs (matching variant, run_no) and test:
-    H0: E[ log(rel/jsonb) ] >= ln(1-Δ)
-    H1: E[ log(rel/jsonb) ] <  ln(1-Δ)
+Filter:
+  Keeps only rows whose 'label' contains "N=<value>" matching --n (default 1,000,000).
 
-Default Δ = 0.20  (i.e., ≥20% faster => rel/jsonb ≤ 0.8 => log-ratio ≤ ln(0.8))
-One-sided t-test per variant and overall. Uses SciPy if available; otherwise
-falls back to a normal approximation.
+Goal:
+  Test whether relational (rel_indexed) is at least Δ faster than JSONB (jsonb_indexed)
+  for each scenario (variant) using per-run execution times.
 
-DB connection:
-- Taken from environment variables with defaults:
-    PGHOST=127.0.0.1
-    PGPORT=5433
-    PGDATABASE=ledgerdb
-    PGUSER=postgres
-    PGPASSWORD=postgres
-- Optional --dsn overrides everything.
+Hypotheses (one-sided):
+  H0: E[ log(rel/jsonb) ] >= ln(1-Δ)
+  H1: E[ log(rel/jsonb) ] <  ln(1-Δ)
 
-Usage example:
-  python test_superiority.py \
-    --label-rel   "N=1000000 rel_indexed" \
-    --label-jsonb "N=1000000 jsonb_indexed" \
-    --alpha 0.05 --delta 0.20 --image
+Pairing:
+  Merge rows by (variant, run_no) between the two label groups.
+
+Usage:
+  python test_superiority_csv.py \
+    --csv bench_results.csv \
+    --label-rel "rel_indexed" \
+    --label-jsonb "jsonb_indexed" \
+    --n 1000000 \
+    --delta 0.20 --alpha 0.05 --image
 """
 
-import os
-import math
-import argparse
-import urllib.parse as urlparse
+import argparse, math, re
+import numpy as np
 import pandas as pd
-from sqlalchemy import create_engine, text
+import matplotlib.pyplot as plt
 
-# Try SciPy for t CDF; fall back to normal CDF if not available
+# SciPy is optional; fall back to normal CDF if not installed.
 try:
     from scipy.stats import t as student_t  # type: ignore
     HAVE_SCIPY = True
 except Exception:
     HAVE_SCIPY = False
 
-# Matplotlib for optional image output
-import matplotlib.pyplot as plt
 
+# ---------------- Utilities ----------------
 
 def normal_cdf(z: float) -> float:
-    # one-sided CDF for standard normal
-    from math import erf
-    return 0.5 * (1.0 + erf(z / math.sqrt(2.0)))
+    from math import erf, sqrt
+    return 0.5 * (1.0 + erf(z / sqrt(2.0)))
 
 
-def build_engine_from_env(dsn_override: str | None = None):
-    """
-    Build a SQLAlchemy engine either from --dsn or from env vars
-    with safe defaults.
-    """
-    if dsn_override:
-        return create_engine(dsn_override, future=True)
-
-    host = os.getenv("PGHOST", "127.0.0.1")
-    port = int(os.getenv("PGPORT", "5433"))
-    db   = os.getenv("PGDATABASE", "ledgerdb")
-    user = os.getenv("PGUSER", "postgres")
-    pwd  = os.getenv("PGPASSWORD", "postgres")
-
-    # URL-quote in case of special chars
-    user_q = urlparse.quote_plus(user)
-    pwd_q  = urlparse.quote_plus(pwd)
-
-    dsn = f"postgresql+psycopg2://{user_q}:{pwd_q}@{host}:{port}/{db}"
-    return create_engine(dsn, future=True)
+def parse_n_from_label(label: str):
+    if not isinstance(label, str):
+        return None
+    m = re.search(r"\bN\s*=\s*([\d,]+)\b", label, flags=re.IGNORECASE)
+    if not m:
+        return None
+    try:
+        return int(m.group(1).replace(",", ""))
+    except Exception:
+        return None
 
 
-def assert_table(engine, fqname="bench.results"):
-    q = text("SELECT to_regclass(:fq) IS NOT NULL AS ok;")
-    with engine.connect() as conn:
-        ok = pd.read_sql(q, conn, params={"fq": fqname}).iloc[0]["ok"]
-    if not ok:
+def substring_filter(df: pd.DataFrame, col: str, needle: str) -> pd.DataFrame:
+    m = df[col].astype(str).str.contains(needle, case=False, na=False)
+    out = df[m].copy()
+    if out.empty:
+        options = sorted(df[col].dropna().unique().tolist())
+        sample = "\n  - ".join(options[:25])
         raise SystemExit(
-            f"Missing table {fqname}. Create it and populate with bench.run_suite_for_size(...)."
+            f"No rows match substring '{needle}' in column '{col}'. "
+            f"Here are some example labels:\n  - {sample}"
         )
+    return out
 
 
-def fetch_pairs(engine, label_rel: str, label_jsonb: str) -> pd.DataFrame:
-    """
-    Return paired rows for each (variant, run_no): rel_ms, jsonb_ms, and log_ratio=ln(rel/jsonb).
-    """
-    sql = text("""
-    WITH r AS (
-      SELECT variant, run_no, execution_ms AS ms
-      FROM bench.results
-      WHERE label = :rel
-    ),
-    j AS (
-      SELECT variant, run_no, execution_ms AS ms
-      FROM bench.results
-      WHERE label = :jsonb
-    )
-    SELECT r.variant, r.run_no, r.ms AS rel_ms, j.ms AS jsonb_ms,
-           CASE WHEN r.ms > 0 AND j.ms > 0 THEN LN(r.ms / j.ms) END AS log_ratio
-    FROM r JOIN j USING(variant, run_no)
-    ORDER BY r.variant, r.run_no;
-    """)
-    with engine.connect() as conn:
-        df = pd.read_sql(sql, conn, params={"rel": label_rel, "jsonb": label_jsonb})
-    # Drop any rows with null or non-finite log_ratio
-    df = df[pd.to_numeric(df["log_ratio"], errors="coerce").notnull()].copy()
-    return df
-
-
-def one_sided_t_pvalue(sample, mu0=0.0, alternative="less"):
-    """
-    One-sample t-test p-value for H1: mean < mu0 (or > mu0).
-    Returns (t_stat, df, p_value).
-    If SciPy is missing, use normal approximation.
-    """
-    import numpy as np
-    x = np.asarray(sample, dtype=float)
+def one_sided_t_from_sample(x: np.ndarray, mu0: float, alternative="less"):
+    x = np.asarray(x, dtype=float)
     x = x[np.isfinite(x)]
     n = x.size
     if n < 2:
         return float("nan"), 0, float("nan")
-
     mean = float(x.mean())
     sd = float(x.std(ddof=1))
     if sd == 0.0:
-        # All identical; t is +/- inf if mean != mu0, else 0
+        # If all identical, t is ±inf if mean != mu0, else 0
         t = -float("inf") if (mean < mu0 and alternative == "less") else (
             float("inf") if (mean > mu0 and alternative == "greater") else 0.0
         )
         p = 0.0 if abs(t) == float("inf") else 1.0
         return t, n - 1, p
-
     se = sd / math.sqrt(n)
     t_stat = (mean - mu0) / se
     df = n - 1
     if HAVE_SCIPY:
-        if alternative == "less":
-            p = float(student_t.cdf(t_stat, df))
-        else:  # greater
-            p = float(1.0 - student_t.cdf(t_stat, df))
+        p = float(student_t.cdf(t_stat, df)) if alternative == "less" else float(1.0 - student_t.cdf(t_stat, df))
     else:
-        # Normal approximation
-        if alternative == "less":
-            p = normal_cdf(t_stat)
-        else:
-            p = 1.0 - normal_cdf(t_stat)
+        p = normal_cdf(t_stat) if alternative == "less" else (1.0 - normal_cdf(t_stat))
     return t_stat, df, p
 
 
-def summarize_variant(group_df: pd.DataFrame, delta: float, alpha: float):
+def summarize_variant(log_ratios: np.ndarray, delta: float, alpha: float):
     """
-    For a single variant: test mean(log_ratio) < ln(1 - delta)
-    Return dict with stats.
+    Returns dict of stats for one variant.
+    - 'passes' is from the one-sided t-test (requires n>=2)
+    - 'point_pass' checks geometric mean ratio vs threshold (works for n>=1)
     """
-    import numpy as np
-    target = math.log(1.0 - delta)  # ln(0.8) for delta=0.2
-    logs = group_df["log_ratio"].to_numpy(dtype=float)
-    n = int(np.isfinite(logs).sum())
-    mean = float(np.nanmean(logs)) if n else float("nan")
-    t, df, p = one_sided_t_pvalue(logs, mu0=target, alternative="less")
-    success = (p < alpha) if math.isfinite(p) else False
+    target = math.log(1.0 - delta)
+    x = np.asarray(log_ratios, dtype=float)
+    x = x[np.isfinite(x)]
+    n = x.size
+    mean = float(np.nanmean(x)) if n else float("nan")
+    geor = math.exp(mean) if math.isfinite(mean) else float("nan")
+
+    t, df, p = one_sided_t_from_sample(x, mu0=target, alternative="less")
+    stat_pass = (p < alpha) if math.isfinite(p) else False
+    point_pass = (geor <= (1.0 - delta)) if math.isfinite(geor) else False
+    note = "" if n >= 2 else "Only 1 pair; per-variant t-test undefined (df=0)."
+
     return {
-        "n_pairs": n,
+        "n_pairs": int(n),
         "mean_log_ratio": mean,
-        "geomean_ratio": math.exp(mean) if math.isfinite(mean) else float("nan"),
+        "geomean_ratio": geor,
         "threshold_ratio": (1.0 - delta),
         "t_stat": t,
         "df": df,
         "p_value": p,
-        "passes": success,
+        "passes": stat_pass,
+        "point_pass": point_pass,
+        "note": note,
     }
 
 
-# ------------------ Image rendering helpers ------------------
+# ---------------- Image rendering ----------------
 
-def _format_p(p: float) -> str:
-    if not math.isfinite(p):
-        return "nan"
-    if p < 1e-4:
-        return f"{p:.1e}"
-    return f"{p:.4f}"
-
-
-def _human_pct(x: float) -> str:
-    if not math.isfinite(x):
-        return "nan"
-    sign = "+" if x >= 0 else ""
-    return f"{sign}{x:.1f}%"
-
-def render_image_table(out_df, delta: float, alpha: float,
-                       out_path: str = "superiority_results.png",
-                       dpi: int = 200,
-                       base_width: float = 12.0,
-                       row_height_in: float = 0.90,   # << taller rows
-                       header_fontsize: int = 11,
-                       body_fontsize: int = 9,
-                       title_fontsize: int = 16,
-                       subtitle_fontsize: int = 10) -> None:
-    """
-    Monochrome, spacious table:
-      - Taller rows via figure height + cell height + extra padding
-      - Smaller fonts inside table
-      - Black & white only (no color fills)
-    """
-    import math
-    import matplotlib.pyplot as plt
-    import pandas as pd
-
+def render_image_table(out_df: pd.DataFrame, delta: float, alpha: float,
+                       out_path: str = "superiority_results.png", dpi: int = 200):
     df = out_df.copy()
     df["improvement_pct"] = (1.0 - df["geomean_ratio"]) * 100.0
 
-    cols = [
-        "variant", "n_pairs",
-        "geomean_ratio", "improvement_pct",
-        "threshold_ratio", "t_stat", "df", "p_value", "passes"
-    ]
+    cols = ["variant", "n_pairs", "geomean_ratio", "improvement_pct",
+            "threshold_ratio", "t_stat", "df", "p_value", "passes", "point_pass"]
     show = df[cols].copy()
 
-    def _fmt(x): return f"{x:.4f}" if math.isfinite(x) else "nan"
-    def _fmt_pct(x):
-        if not math.isfinite(x): return "nan"
-        sign = "+" if x >= 0 else ""
-        return f"{sign}{x:.1f}%"
-    def _fmt_p(p):
-        if not math.isfinite(p): return "nan"
-        return f"{p:.1e}" if p < 1e-4 else f"{p:.4f}"
+    def _fmt(x):  return f"{x:.4f}" if np.isfinite(x) else "nan"
+    def _fmt_pct(x): return ("+" if x >= 0 else "") + f"{x:.1f}%" if np.isfinite(x) else "nan"
+    def _fmt_p(p): return (f"{p:.1e}" if p < 1e-4 else f"{p:.4f}") if np.isfinite(p) else "nan"
 
     show["geomean_ratio"]   = show["geomean_ratio"].map(_fmt)
     show["improvement_pct"] = show["improvement_pct"].map(_fmt_pct)
-    show["threshold_ratio"] = (1.0 - delta)
     show["threshold_ratio"] = show["threshold_ratio"].map(lambda x: f"{x:.2f}")
-    show["t_stat"]          = show["t_stat"].map(lambda x: f"{x:.3f}" if math.isfinite(x) else "nan")
+    show["t_stat"]          = show["t_stat"].map(lambda x: f"{x:.3f}" if np.isfinite(x) else "nan")
     show["p_value"]         = show["p_value"].map(_fmt_p)
     show["passes"]          = show["passes"].map(lambda b: "PASS" if bool(b) else "FAIL")
+    show["point_pass"]      = show["point_pass"].map(lambda b: "YES" if bool(b) else "NO")
 
     col_labels = ["Variant", "Pairs", "GeoMean ratio (rel/jsonb)", "REL faster (Δ%)",
-                  "Target ratio", "t", "df", "p-value", "Decision"]
+                  "Target ratio", "t", "df", "p-value", "Decision", "Point pass"]
     cell_text = show.values.tolist()
 
-    # Monochrome: no pass/fail coloring
     nrows = len(cell_text)
-    fig_w = base_width
-    fig_h = max(3.0, row_height_in * (nrows + 3))  # scale height by number of rows
+    fig_w, fig_h = 12.0, max(3.0, 0.90 * (nrows + 3))
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     ax.axis("off")
 
     title = "Rel vs JSONB Superiority Test (one-sided)"
     subtitle = f"Target: rel/jsonb ≤ {1.0 - delta:.2f} (≥{int(delta*100)}% faster), α = {alpha}"
-    ax.text(0.5, 1.05, title, ha="center", va="bottom",
-            fontsize=title_fontsize, fontweight="bold", transform=ax.transAxes, color="black")
-    ax.text(0.5, 1.01, subtitle, ha="center", va="bottom",
-            fontsize=subtitle_fontsize, color="black", transform=ax.transAxes)
+    ax.text(0.5, 1.05, title, ha="center", va="bottom", fontsize=16, fontweight="bold", transform=ax.transAxes, color="black")
+    ax.text(0.5, 1.01, subtitle, ha="center", va="bottom", fontsize=10, transform=ax.transAxes, color="black")
 
-    # Wider first/ratio columns; all black edges, white faces
-    col_widths = [0.26, 0.08, 0.20, 0.13, 0.10, 0.08, 0.05, 0.10, 0.10]
-
-    tbl = ax.table(cellText=cell_text,
-                   colLabels=col_labels,
-                   colWidths=col_widths,
-                   cellLoc="center",
-                   loc="upper center")
-
-    # Smaller fonts
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(body_fontsize)
-
-    # Header styling (monochrome)
+    col_widths = [0.26, 0.08, 0.20, 0.13, 0.10, 0.08, 0.05, 0.10, 0.10, 0.11]
+    tbl = ax.table(cellText=cell_text, colLabels=col_labels, colWidths=col_widths,
+                   cellLoc="center", loc="upper center")
+    tbl.auto_set_font_size(False); tbl.set_fontsize(9)
     for j in range(len(col_labels)):
-        cell = tbl[0, j]
-        cell.set_facecolor("white")
-        cell.set_edgecolor("black")
-        cell.set_linewidth(1.2)
-        cell.get_text().set_fontsize(header_fontsize)
-        cell.get_text().set_weight("bold")
-        cell.PAD = 0.08  # more vertical padding
-
-    # Body styling: white cells, black grid, extra padding, taller cells
-    # The table uses normalized axes coords; tweak height explicitly.
+        cell = tbl[0, j]; cell.set_facecolor("white"); cell.set_edgecolor("black")
+        cell.set_linewidth(1.2); cell.get_text().set_fontsize(11); cell.get_text().set_weight("bold"); cell.PAD = 0.08
     for i in range(1, nrows + 1):
         for j in range(len(col_labels)):
-            cell = tbl[i, j]
-            cell.set_facecolor("white")
-            cell.set_edgecolor("black")
-            cell.set_linewidth(0.8)
-            cell.PAD = 0.10                    # << extra inner space
-            cell.set_height(0.08)              # << taller cells
-            # Left-align first column; right-align numbers
-            if j == 0:
-                cell._loc = "w"
-            elif j in (1, 2, 3, 4, 5, 6, 7):
-                cell._loc = "e"
+            cell = tbl[i, j]; cell.set_facecolor("white"); cell.set_edgecolor("black")
+            cell.set_linewidth(0.8); cell.PAD = 0.10; cell.set_height(0.08)
+            if j == 0: cell._loc = "w"
+            else: cell._loc = "e"
 
-    # Emphasize OVERALL row only via bold text + heavier border (still monochrome)
+    # emphasize overall row if present
     overall_idx = df.index[df["variant"] == "__OVERALL__"]
     if len(overall_idx):
         i = int(overall_idx[0]) + 1
         for j in range(len(col_labels)):
-            cell = tbl[i, j]
-            cell.get_text().set_weight("bold")
-            cell.set_linewidth(1.4)
+            cell = tbl[i, j]; cell.get_text().set_weight("bold"); cell.set_linewidth(1.4)
 
-    # Monochrome footnote
     ax.text(0.0, -0.06,
             "Decision = PASS if one-sided t-test p < α for H1: E[log(rel/jsonb)] < ln(1−Δ). "
-            "Δ% = (1 − geomean_ratio)×100.",
+            "'Point pass' ignores variance (n=1 friendly).",
             ha="left", va="top", fontsize=9, color="black", transform=ax.transAxes)
 
     plt.subplots_adjust(top=0.80, bottom=0.18, left=0.05, right=0.98)
@@ -316,55 +199,76 @@ def render_image_table(out_df, delta: float, alpha: float,
     plt.close(fig)
 
 
-# ------------------ Main ------------------
+# ---------------- Core logic ----------------
 
 def main():
-    ap = argparse.ArgumentParser(description="Test if rel_indexed is ≥Δ faster than jsonb_indexed with one-sided tests.")
-    ap.add_argument("--label-rel", required=True, help='Exact label for relational runs, e.g. "N=1000000 rel_indexed"')
-    ap.add_argument("--label-jsonb", required=True, help='Exact label for jsonb runs, e.g. "N=1000000 jsonb_indexed"')
-    ap.add_argument("--delta", type=float, default=0.20, help="Target speedup fraction (default 0.20 => 20%% faster)")
-    ap.add_argument("--alpha", type=float, default=0.05, help="Significance level (default 0.05)")
-    ap.add_argument("--dsn", default=None, help="Optional SQLAlchemy DSN; if omitted, uses PG* env vars with defaults")
-
-    # Image options
-    ap.add_argument("--image", action="store_true",
-                    help="If set, render a nicely formatted PNG summary image.")
-    ap.add_argument("--image-path", default="superiority_results.png",
-                    help="Path to save the image (PNG). Default: superiority_results.png")
-    ap.add_argument("--image-dpi", type=int, default=180,
-                    help="Image DPI for the PNG. Default: 180")
+    ap = argparse.ArgumentParser(description="One-sided superiority test (rel ≥ Δ faster than jsonb) from bench_results.csv using execution_ms, filtered to a single N.")
+    ap.add_argument("--csv", required=True, help="Path to bench_results.csv")
+    ap.add_argument("--label-rel",   default="rel_indexed",   help="Substring to select relational rows (default: rel_indexed)")
+    ap.add_argument("--label-jsonb", default="jsonb_indexed", help="Substring to select JSONB rows (default: jsonb_indexed)")
+    ap.add_argument("--n", type=int, default=1_000_000, help="Only keep rows whose label encodes this N via 'N=<value>' (default 1,000,000)")
+    ap.add_argument("--delta", type=float, default=0.20, help="Target speedup fraction Δ (default 0.20)")
+    ap.add_argument("--alpha", type=float, default=0.05, help="Significance level α (default 0.05)")
+    ap.add_argument("--image", action="store_true", help="Render a PNG summary table")
+    ap.add_argument("--image-path", default="superiority_results.png", help="PNG output path")
+    ap.add_argument("--image-dpi", type=int, default=180, help="PNG DPI")
 
     args = ap.parse_args()
 
-    eng = build_engine_from_env(args.dsn)
-    assert_table(eng, "bench.results")
+    # Load CSV
+    df = pd.read_csv(args.csv)
+    df.columns = [c.strip().lower() for c in df.columns]
 
-    df = fetch_pairs(eng, args.label_rel, args.label_jsonb)
+    # Sanity checks
+    for must in ("label", "variant", "run_no", "execution_ms"):
+        if must not in df.columns:
+            raise SystemExit(f"CSV must contain column '{must}'")
+
+    # Filter to N parsed from label
+    df["n_rows"] = df["label"].apply(parse_n_from_label)
+    df = df[df["n_rows"] == args.n].copy()
     if df.empty:
-        raise SystemExit("No paired runs found. Check labels and that bench.results is populated.")
+        raise SystemExit(f"No rows found with N={args.n:,} in labels. "
+                         "Make sure labels include 'N=<value>' (e.g., 'N=1000000 rel_indexed').")
 
-    # Per-variant analysis
+    # Keep only rows with positive execution_ms
+    df["execution_ms"] = pd.to_numeric(df["execution_ms"], errors="coerce")
+    df = df[(df["execution_ms"] > 0) & df["execution_ms"].notna()].copy()
+    if df.empty:
+        raise SystemExit("No valid rows with positive execution_ms after cleaning.")
+
+    # Select the two groups by substring on 'label'
+    rel = substring_filter(df, "label", args.label_rel)[["variant", "run_no", "execution_ms"]].rename(columns={"execution_ms": "rel_ms"})
+    jsn = substring_filter(df, "label", args.label_jsonb)[["variant", "run_no", "execution_ms"]].rename(columns={"execution_ms": "jsonb_ms"})
+
+    # Pair by (variant, run_no)
+    pairs = pd.merge(rel, jsn, on=["variant", "run_no"], how="inner")
+    if pairs.empty:
+        raise SystemExit("No paired rows after merging by (variant, run_no). Check label substrings and data consistency.")
+
+    # Compute log ratio log(rel/jsonb); drop any non-finite
+    pairs["log_ratio"] = np.where((pairs["rel_ms"] > 0) & (pairs["jsonb_ms"] > 0),
+                                  np.log(pairs["rel_ms"] / pairs["jsonb_ms"]), np.nan)
+    pairs = pairs[np.isfinite(pairs["log_ratio"])].copy()
+    if pairs.empty:
+        raise SystemExit("All pairs had non-positive or invalid execution_ms.")
+
+    # Per-variant summaries
     out_rows = []
-    for variant, g in df.groupby("variant", sort=True):
-        stats = summarize_variant(g, delta=args.delta, alpha=args.alpha)
-        out = {"variant": variant}
-        out.update(stats)
-        out_rows.append(out)
-
+    for variant, g in pairs.groupby("variant", sort=True):
+        stats = summarize_variant(g["log_ratio"].to_numpy(), delta=args.delta, alpha=args.alpha)
+        out_rows.append({"variant": variant, **stats})
     out_df = pd.DataFrame(out_rows).sort_values("variant").reset_index(drop=True)
 
-    # Overall test pooling all pairs across variants
-    overall = summarize_variant(df, delta=args.delta, alpha=args.alpha)
-    overall_row = {"variant": "__OVERALL__", **overall}
-    out_df = pd.concat([out_df, pd.DataFrame([overall_row])], ignore_index=True)
+    # Overall (pool all paired log-ratios)
+    overall_stats = summarize_variant(pairs["log_ratio"].to_numpy(), delta=args.delta, alpha=args.alpha)
+    out_df = pd.concat([out_df, pd.DataFrame([{"variant": "__OVERALL__", **overall_stats}])], ignore_index=True)
 
-    # Pretty print
-    pd.set_option("display.max_columns", None)
-    pd.set_option("display.width", 160)
-    print("\nRel vs JSONB (ratio = rel/jsonb). Target ratio <= {:.2f} (≥{:.0f}% faster)".format(1.0 - args.delta, args.delta * 100))
+    # Print + save
+    pd.set_option("display.width", 180)
+    print(f"\nRel vs JSONB at N={args.n:,} using metric 'execution_ms' (ratio = rel/jsonb). "
+          f"Target ratio ≤ {1.0 - args.delta:.2f} (≥{int(args.delta*100)}% faster)")
     print(out_df.to_string(index=False, float_format=lambda x: f"{x:.4g}"))
-
-    # Save CSV
     out_df.to_csv("./superiority_results.csv", index=False)
     print("\nSaved: superiority_results.csv")
 

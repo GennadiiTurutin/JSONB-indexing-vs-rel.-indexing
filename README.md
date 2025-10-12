@@ -142,11 +142,12 @@ Decision (significance α=0.05): Reject H₀ (claim ≥10% faster) if p<α.
 The script performs the above per scenario and again on a pooled dataset (all scenarios combined) to provide an overall conclusion.
 
 ```
-python test_superiority.py \
-  --label-rel   "N=1000000 rel_indexed" \
-  --label-jsonb "N=1000000 jsonb_indexed" \
-  --alpha 0.05 \
-  --delta 0.10
+python3 test_superiority.py \    
+  --csv bench_results.csv \
+  --label-rel "rel_indexed" \
+  --label-jsonb "jsonb_indexed" \
+  --n 1000000 \
+  --delta 0.10 --alpha 0.05 --image
 ```
 The script:
 - fetches paired rows from bench.results,
@@ -184,10 +185,10 @@ H₁: geomean < (1 − Δ)
 
 Example (prove REL is ≥20% faster, α=0.05, N=1,000,000):
 
-python test_superiority.py \
+python3 test_superiority.py \
   --label-rel   "N=1000000 rel_indexed" \
   --label-jsonb "N=1000000 jsonb_indexed" \
-  --delta 0.20 \
+  --delta 0.10 \
   --alpha 0.05 --image
 
 Typical output (per scenario + overall):
@@ -230,10 +231,6 @@ Removing with docker compose down -v deletes all DB data.
 1) Start Postgres
 docker compose up -d db
 
-# e.g. docker compose run --rm -e ROWS=1000000 seed
-
-3) Run the benchmark suite: python export_bench_to_excel.py 
-
 4) Shut down
 docker compose down -v
 
@@ -247,7 +244,7 @@ Warmups: each scenario warms up (p_warmup) before timing (p_runs) to stabilize c
 
 The Excel file aggregates p50/p95/avg and buffer counters per (label, variant).
 
-python viz_single_run.py \
+python3 viz_single_run.py \
   --file exports/performance_run_1000000.xlsx \
   --labels "jsonb_ind" "jsonb_unind" "rel_ind" "rel_unind" \
   --metric p95_ms \
@@ -255,11 +252,12 @@ python viz_single_run.py \
   --ratio 0.655
 
 # Scaling graph
-python viz_scaling.py --glob "exports/performance_run_*.xlsx" \
+python3 viz_scaling.py --glob "exports/performance_run_*.xlsx" \
   --outdir viz_scaling \
   --metric p95_ms \
   --ylabel none \
-  --ratio 0.655
+  --ratio 0.655 \
+  --indexing indexed
 
 
 # Relative performance graph
@@ -267,3 +265,6 @@ python3 make_relative_table.py \
   --csv ./viz_single_grouped/p95_ms_wide.csv \
   --title "Relative Performance (p95)" \
   --out ./relative_table.png
+
+
+python3 viz_hits.py --csv bench_results.csv --n 1000000 --outdir viz_bench_1mio

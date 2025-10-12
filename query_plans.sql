@@ -191,7 +191,7 @@ WHERE (payload->>'indexed_text_1') = 'A'
 
 EXPLAIN ANALYZE
 SELECT id FROM inv_rel
-WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = TRUE AND indexed_number_1 > 100;
+WHERE indexed_text_1 = 'A' AND indexed_boolean_1 IS TRUE AND indexed_number_1 > 100;
 -- "Bitmap Heap Scan on inv_rel  (cost=353.43..17820.51 rows=19577 width=8) (actual time=11.671..47.936 rows=38458 loops=1)"
 -- "  Recheck Cond: ((indexed_text_1 = 'A'::text) AND indexed_boolean_1 AND (indexed_number_1 > '100'::numeric))"
 -- "  Heap Blocks: exact=38248"
@@ -219,7 +219,7 @@ WHERE (payload->>'indexed_text_1') = 'A'
 
 EXPLAIN ANALYZE
 SELECT id FROM inv_rel
-WHERE indexed_text_1 = 'A' OR indexed_boolean_1 = TRUE;
+WHERE indexed_text_1 = 'A' OR indexed_boolean_1 IS TRUE;
 
 -- "Bitmap Heap Scan on inv_rel  (cost=4673.80..63020.15 rows=519088 width=8) (actual time=33.600..300.207 rows=500000 loops=1)"
 -- "  Recheck Cond: ((indexed_text_1 = 'A'::text) OR indexed_boolean_1)"
