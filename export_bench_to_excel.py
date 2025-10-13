@@ -21,12 +21,50 @@ ENGINE = create_engine(
     pool_pre_ping=True,
 )
 
+# def run_suite(n: int, runs: int = 30, warm: int = 2, clear: bool = True):
+#     print(f"\n▶ Running suite for N={n:,} ...")
+#     with ENGINE.begin() as conn:
+#         conn.execute(
+#             text("CALL bench.run_suite_for_size(:n, :runs, :warm, :clr)"),
+#             {"n": n, "runs": runs, "warm": warm, "clr": clear},
+#         )
+#     print("   ...done")
+
+
 def run_suite(n: int, runs: int = 30, warm: int = 2, clear: bool = True):
     print(f"\n▶ Running suite for N={n:,} ...")
-    with ENGINE.begin() as conn:
+    with ENGINE.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        # 1) Seed
+        conn.execute(text("CALL bench.seed_both(:n)"), {"n": n})
+
+        # 2) Disable autovacuum (tables + toast) to prevent background noise
+        conn.exec_driver_sql(
+            "ALTER TABLE inv_rel "
+            "SET (autovacuum_enabled=off, toast.autovacuum_enabled=off)"
+        )
+        conn.exec_driver_sql(
+            "ALTER TABLE inv_jsonb "
+            "SET (autovacuum_enabled=off, toast.autovacuum_enabled=off)"
+        )
+
+        # 3) Manual VACUUMs (top-level only)
+        conn.exec_driver_sql("VACUUM (ANALYZE, FREEZE) inv_rel;")
+        conn.exec_driver_sql("VACUUM (ANALYZE, FREEZE) inv_jsonb;")
+
+        # 4) Run the suite (this proc must NOT do COMMIT/VACUUM)
         conn.execute(
             text("CALL bench.run_suite_for_size(:n, :runs, :warm, :clr)"),
             {"n": n, "runs": runs, "warm": warm, "clr": clear},
+        )
+
+        # 5) Re-enable autovacuum
+        conn.exec_driver_sql(
+            "ALTER TABLE inv_rel "
+            "RESET (autovacuum_enabled, toast.autovacuum_enabled)"
+        )
+        conn.exec_driver_sql(
+            "ALTER TABLE inv_jsonb "
+            "RESET (autovacuum_enabled, toast.autovacuum_enabled)"
         )
     print("   ...done")
 

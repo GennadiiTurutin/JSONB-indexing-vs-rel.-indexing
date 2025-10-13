@@ -142,12 +142,7 @@ Decision (significance α=0.05): Reject H₀ (claim ≥10% faster) if p<α.
 The script performs the above per scenario and again on a pooled dataset (all scenarios combined) to provide an overall conclusion.
 
 ```
-python3 test_superiority.py \    
-  --csv bench_results.csv \
-  --label-rel "rel_indexed" \
-  --label-jsonb "jsonb_indexed" \
-  --n 1000000 \
-  --delta 0.10 --alpha 0.05 --image
+python3 test_superiority.py --csv bench_results.csv --label-rel "rel_indexed" --label-jsonb "jsonb_indexed" --n 1000000 --delta 0.10 --alpha 0.05 --image
 ```
 The script:
 - fetches paired rows from bench.results,

@@ -1,254 +1,518 @@
 -- =============== S1) Equality text + numeric inequality ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_1') = 'A'
   AND ((payload->>'indexed_number_1')::numeric) > 100;
--- "Bitmap Heap Scan on inv_jsonb  (cost=233.83..36867.96 rows=37661 width=8) (actual time=13.573..86.132 rows=38458 loops=1)"
--- "  Recheck Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
--- "  Filter: (((payload ->> 'indexed_number_1'::text))::numeric > '100'::numeric)"
--- "  Rows Removed by Filter: 3"
--- "  Heap Blocks: exact=38452"
--- "  ->  Bitmap Index Scan on inv_jsonb_idx_text_1_trgm  (cost=0.00..224.41 rows=37665 width=0) (actual time=7.404..7.405 rows=38461 loops=1)"
--- "        Index Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
--- "Planning Time: 0.181 ms"
--- "Execution Time: 87.522 ms"
+"Bitmap Heap Scan on inv_jsonb  (cost=239.11..37733.21 rows=38667 width=8) (actual time=15.931..96.547 rows=38460 loops=1)"
+"  Recheck Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
+"  Filter: (((payload ->> 'indexed_number_1'::text))::numeric > '100'::numeric)"
+"  Rows Removed by Filter: 1"
+"  Heap Blocks: exact=38452"
+"  Buffers: shared hit=38492"
+"  ->  Bitmap Index Scan on inv_jsonb_idx_text_1_trgm  (cost=0.00..229.44 rows=38670 width=0) (actual time=8.521..8.522 rows=38461 loops=1)"
+"        Index Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
+"        Buffers: shared hit=40"
+"Planning:"
+"  Buffers: shared hit=5"
+"Planning Time: 0.194 ms"
+"Execution Time: 98.336 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->>'unindexed_text_1') = 'A'
+  AND ((payload->>'unindexed_number_1')::numeric) > 100;
+"Seq Scan on inv_jsonb  (cost=0.00..191341.42 rows=1667 width=8) (actual time=0.034..573.252 rows=38460 loops=1)"
+"  Filter: (((payload ->> 'unindexed_text_1'::text) = 'A'::text) AND (((payload ->> 'unindexed_number_1'::text))::numeric > '100'::numeric))"
+"  Rows Removed by Filter: 961540"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.138 ms"
+"Execution Time: 575.818 ms"
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
 WHERE indexed_text_1 = 'A' AND indexed_number_1 > 100;
+"Index Only Scan using inv_rel_idx_text1_bl1_num1 on inv_rel  (cost=0.42..1042.61 rows=38522 width=8) (actual time=0.046..11.931 rows=38460 loops=1)"
+"  Index Cond: ((indexed_text_1 = 'A'::text) AND (indexed_number_1 > '100'::numeric))"
+"  Heap Fetches: 0"
+"  Buffers: shared hit=18036"
+"Planning:"
+"  Buffers: shared hit=5"
+"Planning Time: 0.269 ms"
+"Execution Time: 13.537 ms"
 
--- "Bitmap Heap Scan on inv_rel  (cost=243.09..29973.24 rows=39191 width=8) (actual time=14.320..59.920 rows=38458 loops=1)"
--- "  Recheck Cond: (indexed_text_1 = 'A'::text)"
--- "  Filter: (indexed_number_1 > '100'::numeric)"
--- "  Rows Removed by Filter: 3"
--- "  Heap Blocks: exact=38251"
--- "  ->  Bitmap Index Scan on inv_rel_idx_text_1_trgm  (cost=0.00..233.29 rows=39195 width=0) (actual time=7.496..7.496 rows=38461 loops=1)"
--- "        Index Cond: (indexed_text_1 = 'A'::text)"
--- "Planning Time: 0.183 ms"
--- "Execution Time: 61.301 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_1 = 'A' AND unindexed_number_1 > 100;
+"Seq Scan on inv_rel  (cost=0.00..66616.04 rows=38522 width=8) (actual time=0.022..312.535 rows=38460 loops=1)"
+"  Filter: ((unindexed_number_1 > '100'::numeric) AND (unindexed_text_1 = 'A'::text))"
+"  Rows Removed by Filter: 961540"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.121 ms"
+"Execution Time: 314.396 ms"
 
 -- =============== S2) LIKE prefix (left-anchored) ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_2') LIKE 'INV00012%';
+"Index Scan using inv_jsonb_idx_text_2_like on inv_jsonb  (cost=0.42..2.65 rows=100 width=8) (actual time=0.021..0.094 rows=100 loops=1)"
+"  Index Cond: (((payload ->> 'indexed_text_2'::text) ~>=~ 'INV00012'::text) AND ((payload ->> 'indexed_text_2'::text) ~<~ 'INV00013'::text))"
+"  Filter: ((payload ->> 'indexed_text_2'::text) ~~ 'INV00012%'::text)"
+"  Buffers: shared hit=22"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.165 ms"
+"Execution Time: 0.112 ms"
 
--- "Index Scan using inv_jsonb_idx_text_2_like on inv_jsonb  (cost=0.42..2.65 rows=100 width=8) (actual time=0.026..0.092 rows=100 loops=1)"
--- "  Index Cond: (((payload ->> 'indexed_text_2'::text) ~>=~ 'INV00012'::text) AND ((payload ->> 'indexed_text_2'::text) ~<~ 'INV00013'::text))"
--- "  Filter: ((payload ->> 'indexed_text_2'::text) ~~ 'INV00012%'::text)"
--- "Planning Time: 0.162 ms"
--- "Execution Time: 0.109 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->>'unindexed_text_2') LIKE 'INV00012%';
+"Seq Scan on inv_jsonb  (cost=0.00..181340.45 rows=5000 width=8) (actual time=0.659..488.470 rows=100 loops=1)"
+"  Filter: ((payload ->> 'unindexed_text_2'::text) ~~ 'INV00012%'::text)"
+"  Rows Removed by Filter: 999900"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.108 ms"
+"Execution Time: 488.489 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
 WHERE indexed_text_2 LIKE 'INV00012%';
+"Index Only Scan using inv_rel_idx_text_2_like on inv_rel  (cost=0.42..1.55 rows=100 width=8) (actual time=0.020..0.044 rows=100 loops=1)"
+"  Index Cond: ((indexed_text_2 ~>=~ 'INV00012'::text) AND (indexed_text_2 ~<~ 'INV00013'::text))"
+"  Filter: (indexed_text_2 ~~ 'INV00012%'::text)"
+"  Heap Fetches: 0"
+"  Buffers: shared hit=5"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.151 ms"
+"Execution Time: 0.063 ms"
 
--- "Index Scan using inv_rel_idx_text_2_like on inv_rel  (cost=0.42..2.65 rows=100 width=8) (actual time=0.025..0.059 rows=100 loops=1)"
--- "  Index Cond: ((indexed_text_2 ~>=~ 'INV00012'::text) AND (indexed_text_2 ~<~ 'INV00013'::text))"
--- "  Filter: (indexed_text_2 ~~ 'INV00012%'::text)"
--- "Planning Time: 0.240 ms"
--- "Execution Time: 0.077 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_2 LIKE 'INV00012%';
+"Seq Scan on inv_rel  (cost=0.00..64116.54 rows=100 width=8) (actual time=0.297..182.792 rows=100 loops=1)"
+"  Filter: (unindexed_text_2 ~~ 'INV00012%'::text)"
+"  Rows Removed by Filter: 999900"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.107 ms"
+"Execution Time: 182.810 ms"
+
 
 -- =============== S3) Substring contains (ILIKE '%…%') / trigram ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_3') ILIKE '%priority%';
+"Bitmap Heap Scan on inv_jsonb  (cost=1278.58..117379.06 rows=167850 width=8) (actual time=111.129..483.156 rows=166666 loops=1)"
+"  Recheck Cond: ((payload ->> 'indexed_text_3'::text) ~~* '%priority%'::text)"
+"  Heap Blocks: exact=166338"
+"  Buffers: shared hit=166874"
+"  ->  Bitmap Index Scan on inv_jsonb_idx_text_3_trgm  (cost=0.00..1236.62 rows=167850 width=0) (actual time=64.156..64.156 rows=166666 loops=1)"
+"        Index Cond: ((payload ->> 'indexed_text_3'::text) ~~* '%priority%'::text)"
+"        Buffers: shared hit=536"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.144 ms"
+"Execution Time: 491.815 ms"
 
--- "Bitmap Heap Scan on inv_jsonb  (cost=1279.15..117427.17 rows=167958 width=8) (actual time=113.241..514.993 rows=166666 loops=1)"
--- "  Recheck Cond: ((payload ->> 'indexed_text_3'::text) ~~* '%priority%'::text)"
--- "  Heap Blocks: exact=166338"
--- "  ->  Bitmap Index Scan on inv_jsonb_idx_text_3_trgm  (cost=0.00..1237.16 rows=167958 width=0) (actual time=65.048..65.049 rows=166666 loops=1)"
--- "        Index Cond: ((payload ->> 'indexed_text_3'::text) ~~* '%priority%'::text)"
--- "Planning Time: 0.142 ms"
--- "Execution Time: 522.144 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->>'unindexed_text_3') ILIKE '%priority%';
+"Seq Scan on inv_jsonb  (cost=0.00..181340.45 rows=100 width=8) (actual time=0.028..1292.807 rows=166666 loops=1)"
+"  Filter: ((payload ->> 'unindexed_text_3'::text) ~~* '%priority%'::text)"
+"  Rows Removed by Filter: 833334"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.139 ms"
+"Execution Time: 1301.560 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
 WHERE indexed_text_3 ILIKE '%priority%';
+"Index Only Scan using inv_rel_idx_text_3_like on inv_rel  (cost=0.42..21665.98 rows=163734 width=8) (actual time=515.247..780.672 rows=166666 loops=1)"
+"  Filter: (indexed_text_3 ~~* '%priority%'::text)"
+"  Rows Removed by Filter: 833334"
+"  Heap Fetches: 0"
+"  Buffers: shared hit=3777"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.135 ms"
+"Execution Time: 787.231 ms"
 
--- "Bitmap Heap Scan on inv_rel  (cost=1170.41..54860.24 rows=166146 width=8) (actual time=53.336..272.607 rows=166666 loops=1)"
--- "  Recheck Cond: (indexed_text_3 ~~* '%priority%'::text)"
--- "  Heap Blocks: exact=51613"
--- "  ->  Bitmap Index Scan on inv_rel_idx_text_3_trgm  (cost=0.00..1128.88 rows=166146 width=0) (actual time=45.411..45.411 rows=166666 loops=1)"
--- "        Index Cond: (indexed_text_3 ~~* '%priority%'::text)"
--- "Planning Time: 0.125 ms"
--- "Execution Time: 278.783 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_3 ILIKE '%priority%';
+"Seq Scan on inv_rel  (cost=0.00..64116.54 rows=163734 width=8) (actual time=0.019..875.350 rows=166666 loops=1)"
+"  Filter: (unindexed_text_3 ~~* '%priority%'::text)"
+"  Rows Removed by Filter: 833334"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.112 ms"
+"Execution Time: 883.617 ms"
 
 
 -- =============== S4) Timestamp range ===============
-EXPLAIN ANALYZE
+-- (JSONB compares ISO strings with COLLATE "C", as in your original)
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
-WHERE (payload->>'indexed_timestamp_1') >= '2025-01-01T00:00:00.000Z'
-  AND (payload->>'indexed_timestamp_1') <  '2025-02-01T00:00:00.000Z';
+WHERE (payload->>'indexed_timestamp_1') COLLATE "C" >= '2025-01-01T00:00:00.000Z'
+  AND (payload->>'indexed_timestamp_1') COLLATE "C" <  '2025-02-01T00:00:00.000Z';
+"Bitmap Heap Scan on inv_jsonb  (cost=1856.91..76960.10 rows=90008 width=8) (actual time=22.912..134.501 rows=85043 loops=1)"
+"  Recheck Cond: ((((payload ->> 'indexed_timestamp_1'::text))::text >= '2025-01-01T00:00:00.000Z'::text) AND (((payload ->> 'indexed_timestamp_1'::text))::text < '2025-02-01T00:00:00.000Z'::text))"
+"  Heap Blocks: exact=68708"
+"  Buffers: shared hit=69493"
+"  ->  Bitmap Index Scan on inv_jsonb_idx_ts_1_txt  (cost=0.00..1834.40 rows=90008 width=0) (actual time=10.672..10.673 rows=85043 loops=1)"
+"        Index Cond: ((((payload ->> 'indexed_timestamp_1'::text))::text >= '2025-01-01T00:00:00.000Z'::text) AND (((payload ->> 'indexed_timestamp_1'::text))::text < '2025-02-01T00:00:00.000Z'::text))"
+"        Buffers: shared hit=785"
+"Planning:"
+"  Buffers: shared hit=4"
+"Planning Time: 0.164 ms"
+"Execution Time: 138.507 ms"
 
--- "Bitmap Heap Scan on inv_jsonb  (cost=1518.88..70041.28 rows=79996 width=8) (actual time=26.742..103.996 rows=84477 loops=1)"
--- "  Recheck Cond: (((payload ->> 'indexed_timestamp_1'::text) >= '2025-01-01T00:00:00.000Z'::text) AND ((payload ->> 'indexed_timestamp_1'::text) < '2025-02-01T00:00:00.000Z'::text))"
--- "  Heap Blocks: exact=68707"
--- "  ->  Bitmap Index Scan on inv_jsonb_idx_ts_1_str  (cost=0.00..1498.88 rows=79996 width=0) (actual time=13.041..13.042 rows=84477 loops=1)"
--- "        Index Cond: (((payload ->> 'indexed_timestamp_1'::text) >= '2025-01-01T00:00:00.000Z'::text) AND ((payload ->> 'indexed_timestamp_1'::text) < '2025-02-01T00:00:00.000Z'::text))"
--- "Planning Time: 0.177 ms"
--- "Execution Time: 107.160 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->>'unindexed_timestamp_1') COLLATE "C" >= '2025-01-01T00:00:00.000Z'
+  AND (payload->>'unindexed_timestamp_1') COLLATE "C" <  '2025-02-01T00:00:00.000Z';
+"Seq Scan on inv_jsonb  (cost=0.00..186340.94 rows=5000 width=8) (actual time=0.025..866.698 rows=85043 loops=1)"
+"  Filter: ((((payload ->> 'unindexed_timestamp_1'::text))::text >= '2025-01-01T00:00:00.000Z'::text) AND (((payload ->> 'unindexed_timestamp_1'::text))::text < '2025-02-01T00:00:00.000Z'::text))"
+"  Rows Removed by Filter: 914957"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.118 ms"
+"Execution Time: 871.054 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
-WHERE indexed_timestamp_1 >= '2025-01-01 00:00:00+00'
-  AND indexed_timestamp_1 <  '2025-02-01 00:00:00+00';
+WHERE indexed_timestamp_1 >= timestamptz '2025-01-01 00:00:00+00'
+  AND indexed_timestamp_1 <  timestamptz '2025-02-01 00:00:00+00';
+"Index Only Scan using inv_rel_idx_ts_1 on inv_rel  (cost=0.42..2188.43 rows=86245 width=8) (actual time=0.013..15.410 rows=85043 loops=1)"
+"  Index Cond: ((indexed_timestamp_1 >= '2025-01-01 00:00:00+00'::timestamp with time zone) AND (indexed_timestamp_1 < '2025-02-01 00:00:00+00'::timestamp with time zone))"
+"  Heap Fetches: 0"
+"  Buffers: shared hit=40160"
+"Planning:"
+"  Buffers: shared hit=4"
+"Planning Time: 0.178 ms"
+"Execution Time: 18.970 ms"
 
--- "Bitmap Heap Scan on inv_rel  (cost=1222.63..49248.35 rows=84683 width=8) (actual time=16.345..66.204 rows=84477 loops=1)"
--- "  Recheck Cond: ((indexed_timestamp_1 >= '2025-01-01 00:00:00+00'::timestamp with time zone) AND (indexed_timestamp_1 < '2025-02-01 00:00:00+00'::timestamp with time zone))"
--- "  Heap Blocks: exact=42318"
--- "  ->  Bitmap Index Scan on inv_rel_idx_ts_1  (cost=0.00..1201.46 rows=84683 width=0) (actual time=8.671..8.672 rows=84477 loops=1)"
--- "        Index Cond: ((indexed_timestamp_1 >= '2025-01-01 00:00:00+00'::timestamp with time zone) AND (indexed_timestamp_1 < '2025-02-01 00:00:00+00'::timestamp with time zone))"
--- "Planning Time: 0.198 ms"
--- "Execution Time: 69.205 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_timestamp_1 >= timestamptz '2025-01-01 00:00:00+00'
+  AND unindexed_timestamp_1 <  timestamptz '2025-02-01 00:00:00+00';
+"Seq Scan on inv_rel  (cost=0.00..66616.04 rows=86145 width=8) (actual time=0.014..229.032 rows=85043 loops=1)"
+"  Filter: ((unindexed_timestamp_1 >= '2025-01-01 00:00:00+00'::timestamp with time zone) AND (unindexed_timestamp_1 < '2025-02-01 00:00:00+00'::timestamp with time zone))"
+"  Rows Removed by Filter: 914957"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.106 ms"
+"Execution Time: 232.958 ms"
 
 -- =============== S5) Array AND (contain BOTH) ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->'indexed_text_array_1') @> '["aml","priority"]'::jsonb;
+"Bitmap Heap Scan on inv_jsonb  (cost=819.77..96807.57 rows=126646 width=8) (actual time=65.119..267.110 rows=123132 loops=1)"
+"  Recheck Cond: ((payload -> 'indexed_text_array_1'::text) @> '[""aml"", ""priority""]'::jsonb)"
+"  Heap Blocks: exact=90837"
+"  Buffers: shared hit=91019"
+"  ->  Bitmap Index Scan on inv_jsonb_idx_text_arr_1_gin  (cost=0.00..788.11 rows=126646 width=0) (actual time=47.142..47.142 rows=123132 loops=1)"
+"        Index Cond: ((payload -> 'indexed_text_array_1'::text) @> '[""aml"", ""priority""]'::jsonb)"
+"        Buffers: shared hit=182"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.157 ms"
+"Execution Time: 272.716 ms"
 
--- "Bitmap Heap Scan on inv_jsonb  (cost=811.98..96004.20 rows=125160 width=8) (actual time=63.264..253.354 rows=123132 loops=1)"
--- "  Recheck Cond: ((payload -> 'indexed_text_array_1'::text) @> '[""aml"", ""priority""]'::jsonb)"
--- "  Heap Blocks: exact=90828"
--- "  ->  Bitmap Index Scan on inv_jsonb_idx_text_arr_1_gin  (cost=0.00..780.69 rows=125160 width=0) (actual time=46.773..46.774 rows=123132 loops=1)"
--- "        Index Cond: ((payload -> 'indexed_text_array_1'::text) @> '[""aml"", ""priority""]'::jsonb)"
--- "Planning Time: 0.142 ms"
--- "Execution Time: 257.888 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->'unindexed_text_array_1') @> '["aml","priority"]'::jsonb;
+"Seq Scan on inv_jsonb  (cost=0.00..181340.45 rows=10001 width=8) (actual time=0.084..737.160 rows=123132 loops=1)"
+"  Filter: ((payload -> 'unindexed_text_array_1'::text) @> '[""aml"", ""priority""]'::jsonb)"
+"  Rows Removed by Filter: 876868"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.095 ms"
+"Execution Time: 743.874 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
 WHERE indexed_text_array_1 @> ARRAY['aml','priority']::text[];
+"Bitmap Heap Scan on inv_rel  (cost=775.97..53934.98 rows=123201 width=8) (actual time=49.391..159.749 rows=123132 loops=1)"
+"  Recheck Cond: (indexed_text_array_1 @> '{aml,priority}'::text[])"
+"  Heap Blocks: exact=47599"
+"  Buffers: shared hit=47747"
+"  ->  Bitmap Index Scan on inv_rel_idx_text_arr_1  (cost=0.00..745.17 rows=123201 width=0) (actual time=41.908..41.909 rows=123132 loops=1)"
+"        Index Cond: (indexed_text_array_1 @> '{aml,priority}'::text[])"
+"        Buffers: shared hit=148"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.122 ms"
+"Execution Time: 165.255 ms"
 
--- "Bitmap Heap Scan on inv_rel  (cost=768.59..53901.14 rows=121564 width=8) (actual time=48.542..115.105 rows=123132 loops=1)"
--- "  Recheck Cond: (indexed_text_array_1 @> '{aml,priority}'::text[])"
--- "  Heap Blocks: exact=47655"
--- "  ->  Bitmap Index Scan on inv_rel_idx_text_arr_1  (cost=0.00..738.20 rows=121564 width=0) (actual time=41.086..41.086 rows=123132 loops=1)"
--- "        Index Cond: (indexed_text_array_1 @> '{aml,priority}'::text[])"
--- "Planning Time: 0.117 ms"
--- "Execution Time: 119.520 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_array_1 @> ARRAY['aml','priority']::text[];
+"Seq Scan on inv_rel  (cost=0.00..64116.54 rows=123201 width=8) (actual time=0.016..470.582 rows=123132 loops=1)"
+"  Filter: (unindexed_text_array_1 @> '{aml,priority}'::text[])"
+"  Rows Removed by Filter: 876868"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.112 ms"
+"Execution Time: 476.278 ms"
 
 -- =============== S6) Array OR (any overlap) ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->'indexed_text_array_1') @> '["aml"]'::jsonb
-   OR (payload->'indexed_text_array_1') @> '["priority"]'::jsonb;
--- "Bitmap Heap Scan on inv_jsonb  (cost=4106.54..184445.46 rows=577492 width=8) (actual time=159.497..981.158 rows=577383 loops=1)"
--- "  Recheck Cond: (((payload -> 'indexed_text_array_1'::text) @> '[""aml""]'::jsonb) OR ((payload -> 'indexed_text_array_1'::text) @> '[""priority""]'::jsonb))"
--- "  Heap Blocks: exact=165409"
--- "  ->  BitmapOr  (cost=4106.54..4106.54 rows=699996 width=0) (actual time=97.210..97.212 rows=0 loops=1)"
--- "        ->  Bitmap Index Scan on inv_jsonb_idx_text_arr_1_gin  (cost=0.00..1914.92 rows=351081 width=0) (actual time=49.109..49.109 rows=349856 loops=1)"
--- "              Index Cond: ((payload -> 'indexed_text_array_1'::text) @> '[""aml""]'::jsonb)"
--- "        ->  Bitmap Index Scan on inv_jsonb_idx_text_arr_1_gin  (cost=0.00..1902.87 rows=348915 width=0) (actual time=48.100..48.100 rows=350659 loops=1)"
--- "              Index Cond: ((payload -> 'indexed_text_array_1'::text) @> '[""priority""]'::jsonb)"
--- "Planning Time: 1.128 ms"
--- "Execution Time: 1006.104 ms"
+   OR (payload->'indexed_text_array_2') @> '["grpA"]'::jsonb;
+"Seq Scan on inv_jsonb  (cost=0.00..186340.94 rows=674055 width=8) (actual time=0.013..1089.473 rows=674753 loops=1)"
+"  Filter: (((payload -> 'indexed_text_array_1'::text) @> '[""aml""]'::jsonb) OR ((payload -> 'indexed_text_array_2'::text) @> '[""grpA""]'::jsonb))"
+"  Rows Removed by Filter: 325247"
+"  Buffers: shared hit=166339"
+"Planning:"
+"  Buffers: shared hit=2"
+"Planning Time: 0.156 ms"
+"Execution Time: 1121.269 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->'unindexed_text_array_1') @> '["aml"]'::jsonb
+   OR (payload->'unindexed_text_array_2') @> '["grpA"]'::jsonb;
+"Seq Scan on inv_jsonb  (cost=0.00..186340.94 rows=19902 width=8) (actual time=0.016..967.585 rows=674753 loops=1)"
+"  Filter: (((payload -> 'unindexed_text_array_1'::text) @> '[""aml""]'::jsonb) OR ((payload -> 'unindexed_text_array_2'::text) @> '[""grpA""]'::jsonb))"
+"  Rows Removed by Filter: 325247"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.114 ms"
+"Execution Time: 995.920 ms"
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
-WHERE 'aml' = ANY(indexed_text_array_1)
-   OR 'priority' = ANY(indexed_text_array_1);
--- "Seq Scan on inv_rel  (cost=0.00..66611.17 rows=575718 width=8) (actual time=0.014..490.873 rows=577383 loops=1)"
--- "  Filter: (('aml'::text = ANY (indexed_text_array_1)) OR ('priority'::text = ANY (indexed_text_array_1)))"
--- "  Rows Removed by Filter: 422617"
--- "Planning Time: 0.926 ms"
--- "Execution Time: 510.620 ms"
+WHERE indexed_text_array_1 @> ARRAY['aml']::text[]
+   OR indexed_text_array_2 @> ARRAY['grpA']::text[];
+"Seq Scan on inv_rel  (cost=0.00..66616.04 rows=674566 width=8) (actual time=0.012..526.807 rows=674753 loops=1)"
+"  Filter: ((indexed_text_array_1 @> '{aml}'::text[]) OR (indexed_text_array_2 @> '{grpA}'::text[]))"
+"  Rows Removed by Filter: 325247"
+"  Buffers: shared hit=51619"
+"Planning:"
+"  Buffers: shared hit=2"
+"Planning Time: 0.131 ms"
+"Execution Time: 554.003 ms"
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_array_1 @> ARRAY['aml']::text[]
+   OR unindexed_text_array_2 @> ARRAY['grpA']::text[];
+"Seq Scan on inv_rel  (cost=0.00..66616.04 rows=674566 width=8) (actual time=0.014..573.377 rows=674753 loops=1)"
+"  Filter: ((unindexed_text_array_1 @> '{aml}'::text[]) OR (unindexed_text_array_2 @> '{grpA}'::text[]))"
+"  Rows Removed by Filter: 325247"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.115 ms"
+"Execution Time: 601.703 ms"
 
 -- =============== S7) Multi-key AND (2 keys) ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_1') = 'A'
   AND ((payload->>'indexed_boolean_1')::boolean) IS TRUE;
+"Bitmap Heap Scan on inv_jsonb  (cost=336.92..20342.96 rows=19414 width=8) (actual time=12.080..66.596 rows=38461 loops=1)"
+"  Recheck Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
+"  Filter: (((payload ->> 'indexed_boolean_1'::text))::boolean IS TRUE)"
+"  Heap Blocks: exact=38452"
+"  Buffers: shared hit=38676"
+"  ->  Bitmap Index Scan on inv_jsonb_idx_text1_bl1_num1_str  (cost=0.00..332.06 rows=19414 width=0) (actual time=5.149..5.149 rows=38461 loops=1)"
+"        Index Cond: (((payload ->> 'indexed_text_1'::text) = 'A'::text) AND (((payload ->> 'indexed_boolean_1'::text))::boolean = true))"
+"        Buffers: shared hit=224"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.162 ms"
+"Execution Time: 68.505 ms"
 
--- "Bitmap Heap Scan on inv_jsonb  (cost=294.20..19801.12 rows=18895 width=8) (actual time=12.122..64.740 rows=38461 loops=1)"
--- "  Recheck Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
--- "  Filter: (((payload ->> 'indexed_boolean_1'::text))::boolean IS TRUE)"
--- "  Heap Blocks: exact=38452"
--- "  ->  Bitmap Index Scan on inv_jsonb_idx_text1_bl1_num1_str  (cost=0.00..289.48 rows=18895 width=0) (actual time=4.857..4.858 rows=38461 loops=1)"
--- "        Index Cond: (((payload ->> 'indexed_text_1'::text) = 'A'::text) AND (((payload ->> 'indexed_boolean_1'::text))::boolean = true))"
--- "Planning Time: 0.177 ms"
--- "Execution Time: 66.242 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->>'unindexed_text_1') = 'A'
+  AND ((payload->>'unindexed_boolean_1')::boolean) IS TRUE;
+"Seq Scan on inv_jsonb  (cost=0.00..188841.18 rows=2500 width=8) (actual time=0.033..529.154 rows=38461 loops=1)"
+"  Filter: (((payload ->> 'unindexed_text_1'::text) = 'A'::text) AND (((payload ->> 'unindexed_boolean_1'::text))::boolean IS TRUE))"
+"  Rows Removed by Filter: 961539"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.121 ms"
+"Execution Time: 531.514 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
-WHERE indexed_text_1 = 'A' AND indexed_boolean_1 = TRUE;
--- "Bitmap Heap Scan on inv_rel  (cost=304.51..17723.68 rows=19579 width=8) (actual time=11.167..46.982 rows=38461 loops=1)"
--- "  Recheck Cond: ((indexed_text_1 = 'A'::text) AND indexed_boolean_1)"
--- "  Heap Blocks: exact=38251"
--- "  ->  Bitmap Index Scan on inv_rel_idx_text1_bl1_num1  (cost=0.00..299.62 rows=19579 width=0) (actual time=4.550..4.551 rows=38461 loops=1)"
--- "        Index Cond: ((indexed_text_1 = 'A'::text) AND (indexed_boolean_1 = true))"
--- "Planning Time: 0.136 ms"
--- "Execution Time: 48.376 ms"
+WHERE indexed_text_1 = 'A' AND indexed_boolean_1 IS TRUE;
+"Index Only Scan using inv_rel_idx_text1_bl1_num1 on inv_rel  (cost=0.42..521.06 rows=19212 width=8) (actual time=0.045..8.998 rows=38461 loops=1)"
+"  Index Cond: ((indexed_text_1 = 'A'::text) AND (indexed_boolean_1 = true))"
+"  Heap Fetches: 0"
+"  Buffers: shared hit=18036"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.140 ms"
+"Execution Time: 10.681 ms"
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_1 = 'A' AND unindexed_boolean_1 IS TRUE;
+"Seq Scan on inv_rel  (cost=0.00..64116.54 rows=19212 width=8) (actual time=0.021..296.250 rows=38461 loops=1)"
+"  Filter: ((unindexed_boolean_1 IS TRUE) AND (unindexed_text_1 = 'A'::text))"
+"  Rows Removed by Filter: 961539"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.105 ms"
+"Execution Time: 298.249 ms"
 
 -- =============== S8) Multi-key AND (3 keys) ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_1') = 'A'
   AND ((payload->>'indexed_boolean_1')::boolean) IS TRUE
   AND ((payload->>'indexed_number_1')::numeric) > 100::numeric;
--- "Index Scan using inv_jsonb_idx_text1_bl1_num1_str on inv_jsonb  (cost=0.42..20177.62 rows=18893 width=8) (actual time=0.047..40.526 rows=38458 loops=1)"
--- "  Index Cond: (((payload ->> 'indexed_text_1'::text) = 'A'::text) AND (((payload ->> 'indexed_boolean_1'::text))::boolean = true) AND (((payload ->> 'indexed_number_1'::text))::numeric > '100'::numeric))"
--- "Planning Time: 0.218 ms"
--- "Execution Time: 41.943 ms"
+"Index Scan using inv_jsonb_idx_text1_bl1_num1_str on inv_jsonb  (cost=0.42..20731.55 rows=19412 width=8) (actual time=0.043..41.166 rows=38460 loops=1)"
+"  Index Cond: (((payload ->> 'indexed_text_1'::text) = 'A'::text) AND (((payload ->> 'indexed_boolean_1'::text))::boolean = true) AND (((payload ->> 'indexed_number_1'::text))::numeric > '100'::numeric))"
+"  Buffers: shared hit=38684"
+"Planning:"
+"  Buffers: shared hit=5"
+"Planning Time: 0.186 ms"
+"Execution Time: 42.978 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->>'unindexed_text_1') = 'A'
+  AND ((payload->>'unindexed_boolean_1')::boolean) IS TRUE
+  AND ((payload->>'unindexed_number_1')::numeric) > 100::numeric;
+"Seq Scan on inv_jsonb  (cost=0.00..198842.15 rows=833 width=8) (actual time=0.037..549.372 rows=38460 loops=1)"
+"  Filter: (((payload ->> 'unindexed_text_1'::text) = 'A'::text) AND (((payload ->> 'unindexed_boolean_1'::text))::boolean IS TRUE) AND (((payload ->> 'unindexed_number_1'::text))::numeric > '100'::numeric))"
+"  Rows Removed by Filter: 961540"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.268 ms"
+"Execution Time: 551.926 ms"
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
-WHERE indexed_text_1 = 'A' AND indexed_boolean_1 IS TRUE AND indexed_number_1 > 100;
--- "Bitmap Heap Scan on inv_rel  (cost=353.43..17820.51 rows=19577 width=8) (actual time=11.671..47.936 rows=38458 loops=1)"
--- "  Recheck Cond: ((indexed_text_1 = 'A'::text) AND indexed_boolean_1 AND (indexed_number_1 > '100'::numeric))"
--- "  Heap Blocks: exact=38248"
--- "  ->  Bitmap Index Scan on inv_rel_idx_text1_bl1_num1  (cost=0.00..348.54 rows=19577 width=0) (actual time=4.846..4.846 rows=38458 loops=1)"
--- "        Index Cond: ((indexed_text_1 = 'A'::text) AND (indexed_boolean_1 = true) AND (indexed_number_1 > '100'::numeric))"
--- "Planning Time: 0.374 ms"
--- "Execution Time: 49.475 ms"
+WHERE indexed_text_1 = 'A'
+  AND indexed_boolean_1 IS TRUE
+  AND indexed_number_1 > 100;
+"Index Only Scan using inv_rel_idx_text1_bl1_num1 on inv_rel  (cost=0.42..569.05 rows=19210 width=8) (actual time=0.045..9.143 rows=38460 loops=1)"
+"  Index Cond: ((indexed_text_1 = 'A'::text) AND (indexed_boolean_1 = true) AND (indexed_number_1 > '100'::numeric))"
+"  Heap Fetches: 0"
+"  Buffers: shared hit=18036"
+"Planning:"
+"  Buffers: shared hit=5"
+"Planning Time: 0.184 ms"
+"Execution Time: 10.855 ms"
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_1 = 'A'
+  AND unindexed_boolean_1 IS TRUE
+  AND unindexed_number_1 > 100;
+"Seq Scan on inv_rel  (cost=0.00..66616.04 rows=19210 width=8) (actual time=0.023..335.887 rows=38460 loops=1)"
+"  Filter: ((unindexed_boolean_1 IS TRUE) AND (unindexed_number_1 > '100'::numeric) AND (unindexed_text_1 = 'A'::text))"
+"  Rows Removed by Filter: 961540"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.133 ms"
+"Execution Time: 337.834 ms"
+
 
 -- =============== S9) OR across keys ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_1') = 'A'
    OR ((payload->>'indexed_boolean_1')::boolean) IS TRUE;
--- "Bitmap Heap Scan on inv_jsonb  (cost=4684.04..183157.41 rows=520410 width=8) (actual time=81.490..712.348 rows=500000 loops=1)"
--- "  Recheck Cond: (((payload ->> 'indexed_text_1'::text) = 'A'::text) OR (((payload ->> 'indexed_boolean_1'::text))::boolean IS TRUE))"
--- "  Filter: (((payload ->> 'indexed_text_1'::text) = 'A'::text) OR (((payload ->> 'indexed_boolean_1'::text))::boolean IS TRUE))"
--- "  Heap Blocks: exact=166339"
--- "  ->  BitmapOr  (cost=4684.04..4684.04 rows=539305 width=0) (actual time=43.121..43.122 rows=0 loops=1)"
--- "        ->  Bitmap Index Scan on inv_jsonb_idx_text_1_trgm  (cost=0.00..224.41 rows=37665 width=0) (actual time=9.139..9.139 rows=38461 loops=1)"
--- "              Index Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
--- "        ->  Bitmap Index Scan on inv_jsonb_idx_bool_1  (cost=0.00..4199.43 rows=501640 width=0) (actual time=33.981..33.981 rows=500000 loops=1)"
--- "              Index Cond: (((payload ->> 'indexed_boolean_1'::text))::boolean = true)"
--- "Planning Time: 0.211 ms"
--- "Execution Time: 731.238 ms"
+"Bitmap Heap Scan on inv_jsonb  (cost=6254.85..184760.77 rows=521339 width=8) (actual time=86.382..674.175 rows=500000 loops=1)"
+"  Recheck Cond: (((payload ->> 'indexed_text_1'::text) = 'A'::text) OR (((payload ->> 'indexed_boolean_1'::text))::boolean IS TRUE))"
+"  Filter: (((payload ->> 'indexed_text_1'::text) = 'A'::text) OR (((payload ->> 'indexed_boolean_1'::text))::boolean IS TRUE))"
+"  Heap Blocks: exact=166339"
+"  Buffers: shared hit=168179"
+"  ->  BitmapOr  (cost=6254.85..6254.85 rows=540752 width=0) (actual time=44.792..44.793 rows=0 loops=1)"
+"        Buffers: shared hit=1840"
+"        ->  Bitmap Index Scan on inv_jsonb_idx_text_1_trgm  (cost=0.00..229.44 rows=38670 width=0) (actual time=6.889..6.889 rows=38461 loops=1)"
+"              Index Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
+"              Buffers: shared hit=40"
+"        ->  Bitmap Index Scan on inv_jsonb_idx_bool_1  (cost=0.00..5764.74 rows=502082 width=0) (actual time=37.902..37.902 rows=500000 loops=1)"
+"              Index Cond: (((payload ->> 'indexed_boolean_1'::text))::boolean = true)"
+"              Buffers: shared hit=1800"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.166 ms"
+"Execution Time: 697.933 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->>'unindexed_text_1') = 'A'
+   OR ((payload->>'unindexed_boolean_1')::boolean) IS TRUE;
+"Seq Scan on inv_jsonb  (cost=0.00..188841.18 rows=502549 width=8) (actual time=0.019..863.156 rows=500000 loops=1)"
+"  Filter: (((payload ->> 'unindexed_text_1'::text) = 'A'::text) OR (((payload ->> 'unindexed_boolean_1'::text))::boolean IS TRUE))"
+"  Rows Removed by Filter: 500000"
+"  Buffers: shared hit=166339"
+"Planning Time: 0.157 ms"
+"Execution Time: 885.416 ms"
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
 WHERE indexed_text_1 = 'A' OR indexed_boolean_1 IS TRUE;
+"Index Only Scan using inv_rel_idx_text1_bl1_num1 on inv_rel  (cost=0.42..24540.28 rows=517883 width=8) (actual time=0.021..289.874 rows=500000 loops=1)"
+"  Filter: ((indexed_text_1 = 'A'::text) OR (indexed_boolean_1 IS TRUE))"
+"  Rows Removed by Filter: 500000"
+"  Heap Fetches: 0"
+"  Buffers: shared hit=470602"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.140 ms"
+"Execution Time: 309.625 ms"
 
--- "Bitmap Heap Scan on inv_rel  (cost=4673.80..63020.15 rows=519088 width=8) (actual time=33.600..300.207 rows=500000 loops=1)"
--- "  Recheck Cond: ((indexed_text_1 = 'A'::text) OR indexed_boolean_1)"
--- "  Heap Blocks: exact=51613"
--- "  ->  BitmapOr  (cost=4673.80..4673.80 rows=538668 width=0) (actual time=25.220..25.221 rows=0 loops=1)"
--- "        ->  Bitmap Index Scan on inv_rel_idx_text_1_trgm  (cost=0.00..233.29 rows=39195 width=0) (actual time=10.220..10.220 rows=38461 loops=1)"
--- "              Index Cond: (indexed_text_1 = 'A'::text)"
--- "        ->  Bitmap Index Scan on inv_rel_idx_bool_1  (cost=0.00..4180.97 rows=499472 width=0) (actual time=14.999..14.999 rows=500000 loops=1)"
--- "              Index Cond: (indexed_boolean_1 = true)"
--- "Planning Time: 0.135 ms"
--- "Execution Time: 317.374 ms"
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_1 = 'A' OR unindexed_boolean_1 IS TRUE;
+"Seq Scan on inv_rel  (cost=0.00..64116.54 rows=517883 width=8) (actual time=0.014..357.099 rows=500000 loops=1)"
+"  Filter: ((unindexed_text_1 = 'A'::text) OR (unindexed_boolean_1 IS TRUE))"
+"  Rows Removed by Filter: 500000"
+"  Buffers: shared hit=51619"
+"Planning Time: 0.106 ms"
+"Execution Time: 378.143 ms"
 
 -- =============== S10) Top-N ordering within a group ===============
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_jsonb
 WHERE (payload->>'indexed_text_1') = 'A'
-ORDER BY (payload->>'indexed_timestamp_1');
--- "Index Scan using inv_jsonb_idx_text1_ts1_str on inv_jsonb  (cost=0.42..38284.09 rows=37665 width=40) (actual time=0.031..47.790 rows=38461 loops=1)"
--- "  Index Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
--- "Planning Time: 0.255 ms"
--- "Execution Time: 50.167 ms"
+ORDER BY (payload->>'indexed_timestamp_1') COLLATE "C";
+"Index Scan using inv_jsonb_idx_text1_ts1_txt on inv_jsonb  (cost=0.42..39246.48 rows=38670 width=40) (actual time=0.030..49.883 rows=38461 loops=1)"
+"  Index Cond: ((payload ->> 'indexed_text_1'::text) = 'A'::text)"
+"  Buffers: shared hit=38832"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.189 ms"
+"Execution Time: 52.070 ms"
 
-EXPLAIN ANALYZE
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_jsonb
+WHERE (payload->>'unindexed_text_1') = 'A'
+ORDER BY (payload->>'unindexed_timestamp_1') COLLATE "C";
+"Sort  (cost=181660.15..181672.65 rows=5000 width=40) (actual time=564.511..568.032 rows=38461 loops=1)"
+"  Sort Key: (((payload ->> 'unindexed_timestamp_1'::text))::text) COLLATE ""C"""
+"  Sort Method: quicksort  Memory: 3640kB"
+"  Buffers: shared hit=166339"
+"  ->  Seq Scan on inv_jsonb  (cost=0.00..181352.95 rows=5000 width=40) (actual time=0.032..533.750 rows=38461 loops=1)"
+"        Filter: ((payload ->> 'unindexed_text_1'::text) = 'A'::text)"
+"        Rows Removed by Filter: 961539"
+"        Buffers: shared hit=166339"
+"Planning Time: 0.130 ms"
+"Execution Time: 570.792 ms"
+
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
 SELECT id FROM inv_rel
 WHERE indexed_text_1 = 'A'
 ORDER BY indexed_timestamp_1;
+"Index Only Scan using inv_rel_idx_text1_ts1 on inv_rel  (cost=0.42..946.33 rows=38526 width=16) (actual time=0.033..9.066 rows=38461 loops=1)"
+"  Index Cond: (indexed_text_1 = 'A'::text)"
+"  Heap Fetches: 0"
+"  Buffers: shared hit=17989"
+"Planning:"
+"  Buffers: shared hit=1"
+"Planning Time: 0.144 ms"
+"Execution Time: 11.096 ms"
 
--- "Index Scan using inv_rel_idx_text1_ts1 on inv_rel  (cost=0.42..32114.43 rows=39195 width=16) (actual time=0.108..40.106 rows=38461 loops=1)"
--- "  Index Cond: (indexed_text_1 = 'A'::text)"
--- "Planning Time: 0.144 ms"
--- "Execution Time: 41.841 ms"
-
+EXPLAIN (ANALYZE, BUFFERS, TIMING)
+SELECT id FROM inv_rel
+WHERE unindexed_text_1 = 'A'
+ORDER BY unindexed_timestamp_1;
+"Sort  (cost=67050.98..67147.29 rows=38526 width=16) (actual time=210.327..213.432 rows=38461 loops=1)"
+"  Sort Key: unindexed_timestamp_1"
+"  Sort Method: quicksort  Memory: 2738kB"
+"  Buffers: shared hit=51619"
+"  ->  Seq Scan on inv_rel  (cost=0.00..64116.54 rows=38526 width=16) (actual time=0.017..200.347 rows=38461 loops=1)"
+"        Filter: (unindexed_text_1 = 'A'::text)"
+"        Rows Removed by Filter: 961539"
+"        Buffers: shared hit=51619"
+"Planning Time: 0.113 ms"
+"Execution Time: 215.985 ms"

@@ -153,7 +153,7 @@ DECLARE
   lbl_rel_unidx   TEXT := format('N=%s rel_unindexed',   p_rows);
 BEGIN
   -- 1) Seed to exact size
-  CALL bench.seed_both(p_rows);
+  -- CALL bench.seed_both(p_rows);
 
   -- 2) Optional: clear previous results for these labels
   IF p_clear THEN
