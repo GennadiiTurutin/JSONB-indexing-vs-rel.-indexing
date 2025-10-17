@@ -130,11 +130,9 @@ BEGIN
     DROP TABLE IF EXISTS _gen_tmp;
     batch_start := batch_end + 1;
   END LOOP;
-
-  ANALYZE inv_rel;
-  ANALYZE inv_jsonb;
 END;
 $proc$;
+
 
 -- =========================================================
 -- Driver: seed to N and run S1..S10 for all groups
@@ -403,6 +401,28 @@ BEGIN
 END;
 $proc$;
 
+-- =========================================================
+-- Post-seed housekeeping: force all-visible/all-frozen
+-- =========================================================
+CREATE OR REPLACE PROCEDURE bench.post_seed_vacuum()
+LANGUAGE plpgsql AS $$
+BEGIN
+  -- Be explicit and thorough so initial scans don't skip pages
+  EXECUTE 'VACUUM (ANALYZE, FREEZE, DISABLE_PAGE_SKIPPING) inv_rel';
+  EXECUTE 'VACUUM (ANALYZE, FREEZE, DISABLE_PAGE_SKIPPING) inv_jsonb';
 
+  -- Optional: if pg_visibility is installed, assert VM bits are set.
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_visibility') THEN
+    -- Error if any page is not all-visible after the vacuum
+    IF EXISTS (
+      SELECT 1 FROM pg_visibility_map('inv_rel')  v WHERE NOT v.all_visible
+      UNION ALL
+      SELECT 1 FROM pg_visibility_map('inv_jsonb') v WHERE NOT v.all_visible
+    ) THEN
+      RAISE WARNING 'Some pages are not all-visible after VACUUM; index-only scans may do heap fetches.';
+    END IF;
+  END IF;
+END;
+$$;
 
 DO $$ BEGIN RAISE NOTICE 'bench procedures created/updated: seed_both, run_suite_for_size'; END $$;

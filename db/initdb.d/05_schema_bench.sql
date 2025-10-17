@@ -17,8 +17,14 @@ CREATE TABLE IF NOT EXISTS bench.results (
   shared_written  BIGINT,
   temp_reads      BIGINT,
   temp_writes     BIGINT,
+  heap_fetches    BIGINT,          -- NEW: total heap fetches across plan
   notes           TEXT
 );
 
-CREATE INDEX IF NOT EXISTS bench_results_label_variant_idx
+-- Original index (useful for time-based browsing within label/variant)
+CREATE INDEX IF NOT EXISTS bench_results_label_variant_ts_idx
 ON bench.results(label, variant, ts);
+
+-- NEW: aligns with your report/query access pattern (ORDER BY variant, run_no)
+CREATE INDEX IF NOT EXISTS bench_results_label_variant_run_idx
+ON bench.results(label, variant, run_no);

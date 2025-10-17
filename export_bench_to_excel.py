@@ -30,26 +30,58 @@ ENGINE = create_engine(
 #         )
 #     print("   ...done")
 
-
 def run_suite(n: int, runs: int = 30, warm: int = 2, clear: bool = True):
     print(f"\n▶ Running suite for N={n:,} ...")
     with ENGINE.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        # 0) Proactively disable autovacuum BEFORE the load (tables + toast)
+        for tbl in ("inv_rel", "inv_jsonb"):
+            print(f"Disabling autovacuum for {tbl}")
+            conn.exec_driver_sql(
+                f"ALTER TABLE {tbl} "
+                "SET (autovacuum_enabled=off, toast.autovacuum_enabled=off)"
+            )
+
         # 1) Seed
         conn.execute(text("CALL bench.seed_both(:n)"), {"n": n})
+        print("Seed complete.")
 
-        # 2) Disable autovacuum (tables + toast) to prevent background noise
-        conn.exec_driver_sql(
-            "ALTER TABLE inv_rel "
-            "SET (autovacuum_enabled=off, toast.autovacuum_enabled=off)"
-        )
-        conn.exec_driver_sql(
-            "ALTER TABLE inv_jsonb "
-            "SET (autovacuum_enabled=off, toast.autovacuum_enabled=off)"
-        )
+        # 2) Manual VACUUMs (analyze + freeze)
+        for tbl in ("inv_rel", "inv_jsonb"):
+            print(f"VACUUM (ANALYZE, FREEZE) {tbl} ...")
+            conn.exec_driver_sql(f"VACUUM (ANALYZE, FREEZE) {tbl};")
+        # NOTE: VACUUM is synchronous; no sleep needed.
 
-        # 3) Manual VACUUMs (top-level only)
-        conn.exec_driver_sql("VACUUM (ANALYZE, FREEZE) inv_rel;")
-        conn.exec_driver_sql("VACUUM (ANALYZE, FREEZE) inv_jsonb;")
+        # 3) (Optional) Verify visibility-map coverage to explain heap fetches
+        vm_sql = """
+        WITH has_vis AS (
+        SELECT EXISTS (
+            SELECT 1 FROM pg_extension WHERE extname = 'pg_visibility'
+        ) AS ok
+        )
+        SELECT
+        c.relname,
+        c.relpages::bigint AS heap_pages,
+        CASE WHEN (SELECT ok FROM has_vis) THEN (
+            SELECT count(*)::bigint
+            FROM pg_visibility_map(c.oid) v
+            WHERE v.all_visible
+        ) ELSE NULL END AS allvisible_pages
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+        AND c.relname IN ('inv_rel','inv_jsonb')
+        AND c.relkind = 'r';
+        """
+        try:
+            rows = conn.exec_driver_sql(vm_sql).fetchall()
+            for relname, relpages, allvis in rows:
+                if allvis is None:
+                    print(f"[VM CHECK] {relname}: heap_pages={relpages} (pg_visibility not installed)")
+                else:
+                    print(f"[VM CHECK] {relname}: heap_pages={relpages}, allvisible_pages={allvis}")
+        except Exception as e:
+            # Don’t fail the run if pg_visibility isn’t present
+            print(f"[VM CHECK] Skipped (reason: {e})")
 
         # 4) Run the suite (this proc must NOT do COMMIT/VACUUM)
         conn.execute(
@@ -58,15 +90,14 @@ def run_suite(n: int, runs: int = 30, warm: int = 2, clear: bool = True):
         )
 
         # 5) Re-enable autovacuum
-        conn.exec_driver_sql(
-            "ALTER TABLE inv_rel "
-            "RESET (autovacuum_enabled, toast.autovacuum_enabled)"
-        )
-        conn.exec_driver_sql(
-            "ALTER TABLE inv_jsonb "
-            "RESET (autovacuum_enabled, toast.autovacuum_enabled)"
-        )
+        for tbl in ("inv_rel", "inv_jsonb"):
+            conn.exec_driver_sql(
+                f"ALTER TABLE {tbl} RESET (autovacuum_enabled, toast.autovacuum_enabled)"
+            )
+            print(f"Re-enabled autovacuum for {tbl}")
+
     print("   ...done")
+
 
 def fetch_summary(n: int) -> pd.DataFrame:
     sql = text("""
