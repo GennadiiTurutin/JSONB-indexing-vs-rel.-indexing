@@ -32,8 +32,9 @@ ENGINE = create_engine(
 
 def run_suite(n: int, runs: int = 30, warm: int = 2, clear: bool = True):
     print(f"\n▶ Running suite for N={n:,} ...")
+
+    # 0) Disable autovacuum BEFORE load
     with ENGINE.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        # 0) Proactively disable autovacuum BEFORE the load (tables + toast)
         for tbl in ("inv_rel", "inv_jsonb"):
             print(f"Disabling autovacuum for {tbl}")
             conn.exec_driver_sql(
@@ -41,36 +42,46 @@ def run_suite(n: int, runs: int = 30, warm: int = 2, clear: bool = True):
                 "SET (autovacuum_enabled=off, toast.autovacuum_enabled=off)"
             )
 
-        # 1) Seed
+    # 1) Seed in its own transaction
+    with ENGINE.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.execute(text("CALL bench.seed_both(:n)"), {"n": n})
         print("Seed complete.")
 
-        # 2) Manual VACUUMs (analyze + freeze)
+    # 2) First VACUUM pass (fresh connection)
+    with ENGINE.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.exec_driver_sql("SET vacuum_freeze_min_age = 0;")
+        conn.exec_driver_sql("SET vacuum_freeze_table_age = 0;")
+        conn.exec_driver_sql("SET vacuum_failsafe_age = 0;")
         for tbl in ("inv_rel", "inv_jsonb"):
-            print(f"VACUUM (ANALYZE, FREEZE) {tbl} ...")
-            conn.exec_driver_sql(f"VACUUM (ANALYZE, FREEZE) {tbl};")
-        # NOTE: VACUUM is synchronous; no sleep needed.
+            print(f"VACUUM (ANALYZE, FREEZE, DISABLE_PAGE_SKIPPING) {tbl} ...")
+            conn.exec_driver_sql(
+                f"VACUUM (ANALYZE, FREEZE, DISABLE_PAGE_SKIPPING) {tbl};"
+            )
 
-        # 3) (Optional) Verify visibility-map coverage to explain heap fetches
+    # 3) Second VACUUM pass (fresh connection) – key for small tables
+    with ENGINE.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        for tbl in ("inv_rel", "inv_jsonb"):
+            print(f"Second VACUUM (FREEZE, DISABLE_PAGE_SKIPPING) {tbl} ...")
+            conn.exec_driver_sql(
+                f"VACUUM (FREEZE, DISABLE_PAGE_SKIPPING) {tbl};"
+            )
+
+        # Optional VM check (pg_visibility)
         vm_sql = """
         WITH has_vis AS (
-        SELECT EXISTS (
-            SELECT 1 FROM pg_extension WHERE extname = 'pg_visibility'
-        ) AS ok
+          SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='pg_visibility') AS ok
         )
         SELECT
-        c.relname,
-        c.relpages::bigint AS heap_pages,
-        CASE WHEN (SELECT ok FROM has_vis) THEN (
-            SELECT count(*)::bigint
-            FROM pg_visibility_map(c.oid) v
-            WHERE v.all_visible
-        ) ELSE NULL END AS allvisible_pages
+          c.relname,
+          c.relpages::bigint AS heap_pages,
+          CASE WHEN (SELECT ok FROM has_vis) THEN (
+            SELECT count(*)::bigint FROM pg_visibility_map(c.oid) v WHERE v.all_visible
+          ) ELSE NULL END AS allvisible_pages
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public'
-        AND c.relname IN ('inv_rel','inv_jsonb')
-        AND c.relkind = 'r';
+        WHERE n.nspname='public'
+          AND c.relname IN ('inv_rel','inv_jsonb')
+          AND c.relkind='r';
         """
         try:
             rows = conn.exec_driver_sql(vm_sql).fetchall()
@@ -80,16 +91,17 @@ def run_suite(n: int, runs: int = 30, warm: int = 2, clear: bool = True):
                 else:
                     print(f"[VM CHECK] {relname}: heap_pages={relpages}, allvisible_pages={allvis}")
         except Exception as e:
-            # Don’t fail the run if pg_visibility isn’t present
             print(f"[VM CHECK] Skipped (reason: {e})")
 
-        # 4) Run the suite (this proc must NOT do COMMIT/VACUUM)
+    # 4) Run the suite in a clean session
+    with ENGINE.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.execute(
             text("CALL bench.run_suite_for_size(:n, :runs, :warm, :clr)"),
             {"n": n, "runs": runs, "warm": warm, "clr": clear},
         )
 
-        # 5) Re-enable autovacuum
+    # 5) Re-enable autovacuum
+    with ENGINE.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         for tbl in ("inv_rel", "inv_jsonb"):
             conn.exec_driver_sql(
                 f"ALTER TABLE {tbl} RESET (autovacuum_enabled, toast.autovacuum_enabled)"
