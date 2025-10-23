@@ -11,6 +11,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import matplotlib.ticker as mtick
 
 ALL_METRICS = ["p50_ms", "p95_ms", "avg_ms", "sum_shared_reads", "sum_shared_hits"]
 COLS, ROWS = 2, 5
@@ -40,8 +41,8 @@ MARKER       = {("jsonb","indexed"):"o",("jsonb","unindexed"):"o",
 
 # Percent overlay (right Y)
 PCT_COLOR = "#5a5a5a"
-PCT_STYLE = {"indexed": (0, (3, 3)), "unindexed": (0, (6, 3))}  # both dashed, different dash
-PCT_MARK  = {"indexed": None, "unindexed": None}  # keep clean
+PCT_STYLE = {"indexed": (0, (3, 3)), "unindexed": (0, (6, 3))}
+PCT_MARK  = {"indexed": None, "unindexed": None}
 
 # ----------------------- parsing -----------------------
 
@@ -141,7 +142,7 @@ def metric_label(metric: str) -> str:
     if metric.endswith("_ms"):
         base = metric.replace("_ms","").replace("_"," ")
         return f"{base.upper()} (ms)" if base.lower() in ("p50","p95","avg") else f"{metric.replace('_',' ')} (ms)"
-    return metric.replace("_"," ")
+    return metric.replace("_", " ")
 
 # ---- compute % slower vs REL (per indexing category) ----
 def compute_pct_vs_rel(sub: pd.DataFrame, metric: str) -> pd.DataFrame:
@@ -164,6 +165,28 @@ def compute_pct_vs_rel(sub: pd.DataFrame, metric: str) -> pd.DataFrame:
     )
     return piv.sort_values(["variant","indexing","size"])
 
+# ---- pretty ticks for log-X ----
+def pretty_log_x_ticks(ax, sizes):
+    # Major at powers of 10 within range; labels 1k, 10k, 100k, 1M, 10M ...
+    if len(sizes) == 0: return
+    smin, smax = np.nanmin(sizes), np.nanmax(sizes)
+    if smin <= 0: smin = 1
+    pmin = int(np.floor(np.log10(smin)))
+    pmax = int(np.ceil(np.log10(smax)))
+    majors = [10**p for p in range(pmin, pmax + 1)]
+    labels = []
+    for v in majors:
+        if v >= 1_000_000:
+            labels.append(f"{int(v/1_000_000)}M")
+        elif v >= 1_000:
+            labels.append(f"{int(v/1_000)}k")
+        else:
+            labels.append(str(int(v)))
+    ax.set_xticks(majors)
+    ax.set_xticklabels(labels)
+    ax.xaxis.set_minor_locator(mtick.LogLocator(base=10.0, subs=tuple(range(2, 10)), numticks=12))
+    ax.xaxis.set_minor_formatter(mtick.NullFormatter())
+
 # ----------------------- plotting -----------------------
 
 def plot_metric_grid(df: pd.DataFrame, metric: str, variants: list[str], series_keys: list[str],
@@ -181,7 +204,7 @@ def plot_metric_grid(df: pd.DataFrame, metric: str, variants: list[str], series_
 
         if ylog: sub.loc[sub[metric] <= 0, metric] = np.nan
 
-        # --- Absolute layer (left axis): identical look to before ---
+        # --- Absolute layer (left axis) ---
         order = ["jsonb_indexed","rel_indexed","jsonb_unindexed","rel_unindexed"]
         for key in order:
             if key not in series_keys: continue
@@ -198,7 +221,10 @@ def plot_metric_grid(df: pd.DataFrame, metric: str, variants: list[str], series_
         ax.set_title(f"{fam} — {fam_title(fam)}", pad=4)
         ax.set_xlabel("Rows (N)")
         if ylabel_mode == "per-axis": ax.set_ylabel(metric_label(metric))
-        if xlog: ax.set_xscale("log")
+        if xlog:
+            ax.set_xscale("log")
+            # make ticks pretty based on all sizes present in this subplot
+            pretty_log_x_ticks(ax, sub["size"].values)
         if ylog: ax.set_yscale("log")
         ax.grid(True, which="both", alpha=0.25)
 
@@ -215,14 +241,14 @@ def plot_metric_grid(df: pd.DataFrame, metric: str, variants: list[str], series_
                 rsub = rsub.sort_values("size")
                 ax2.plot(rsub["size"], rsub["pct_slower"],
                          linestyle=PCT_STYLE[idx_cat], color=PCT_COLOR,
-                         marker=PCT_MARK[idx_cat], linewidth=1.5, label=f"% slower (JSONB vs REL, {idx_cat})")
+                         marker=PCT_MARK[idx_cat], linewidth=1.5,
+                         label=f"% slower (JSONB vs REL, {idx_cat})")
                 drew_any = True
             if drew_any:
                 if y2_log:
-                    # Guard against <=0 on log scale by shifting baseline if needed
                     ymin = np.nanmin(pct_df["pct_slower"].values)
                     if ymin <= 0:
-                        # add a small offset to keep >0; or advise user to avoid log for pct
+                        # If using log on a series that crosses/equals 0, keep linear instead
                         pass
                     ax2.set_yscale("log")
                 ax2.set_ylabel("% slower than REL")
